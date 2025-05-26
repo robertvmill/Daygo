@@ -6,7 +6,7 @@ import { AppSidebar } from '@/components/AppSidebar';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage } from '@/components/ui/breadcrumb';
 import { Separator } from '@/components/ui/separator';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -20,6 +20,18 @@ import Link from 'next/link';
 import { ArrowLeft, Save } from 'lucide-react';
 import { Timestamp } from 'firebase/firestore';
 
+type TableFormData = {
+  cells: string[][];
+  headers: string[];
+  rows: number;
+  columns: number;
+};
+
+type JournalFormData = {
+  title: string;
+  [key: string]: string | boolean | TableFormData | undefined;
+};
+
 export default function NewJournalEntryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -29,7 +41,7 @@ export default function NewJournalEntryPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [template, setTemplate] = useState<JournalTemplate | null>(null);
   const [loading, setLoading] = useState(true);
-  const [formData, setFormData] = useState<Record<string, any>>({
+  const [formData, setFormData] = useState<JournalFormData>({
     title: '',
   });
 
@@ -50,7 +62,7 @@ export default function NewJournalEntryPage() {
               id: parsedTemplate.id.toString(),
               name: parsedTemplate.name,
               description: parsedTemplate.description,
-              fields: parsedTemplate.fields.map((field: any) => ({
+              fields: parsedTemplate.fields.map((field: TemplateField) => ({
                 name: field.name,
                 type: field.type || 'text',
                 label: field.name,
@@ -148,14 +160,15 @@ export default function NewJournalEntryPage() {
       // Prepare the data
       const templateFields: Record<string, string | undefined> = {};
       
-      // Convert all values to appropriate types for storage
       Object.entries(formData).forEach(([key, value]) => {
         if (key === 'title') return; // Skip title
-        // Convert booleans to strings for storage
-        if (typeof value === 'boolean') {
+        // Serialize table/filled table cells as JSON string
+        if (typeof value === 'object' && value && 'cells' in value) {
+          templateFields[key] = JSON.stringify((value as { cells: string[][] }).cells);
+        } else if (typeof value === 'boolean') {
           templateFields[key] = value ? 'true' : 'false';
-        } else {
-          templateFields[key] = value as string;
+        } else if (typeof value === 'string') {
+          templateFields[key] = value;
         }
       });
       
@@ -239,7 +252,7 @@ export default function NewJournalEntryPage() {
             <Input
               id={field.name}
               placeholder={field.placeholder}
-              value={formData[field.name] || ''}
+              value={typeof formData[field.name] === 'string' ? formData[field.name] : ''}
               onChange={(e) => handleInputChange(field.name, e.target.value)}
             />
           </div>
@@ -251,7 +264,7 @@ export default function NewJournalEntryPage() {
             <Textarea
               id={field.name}
               placeholder={field.placeholder}
-              value={formData[field.name] || ''}
+              value={typeof formData[field.name] === 'string' ? formData[field.name] : ''}
               onChange={(e) => handleInputChange(field.name, e.target.value)}
               className="min-h-32"
             />
@@ -317,6 +330,86 @@ export default function NewJournalEntryPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            ) : (
+              <div className="p-4 border rounded-md bg-muted/50 text-muted-foreground">Table data not available</div>
+            )}
+          </div>
+        );
+      case 'fillable_table':
+        return (
+          <div key={field.name} className="space-y-2">
+            <Label htmlFor={field.name}>{field.label} {field.required && <span className="text-destructive">*</span>}</Label>
+            {field.tableData && field.tableData.headers && field.tableData.rows ? (
+              <div className="border rounded-md overflow-x-auto">
+                <table className="w-full caption-bottom text-sm">
+                  <thead className="[&_tr]:border-b">
+                    <tr className="border-b transition-colors">
+                      {field.tableData.headers.map((header, index) => (
+                        <th key={`${field.name}-header-${index}`} className="h-10 px-2 text-left align-middle font-medium text-muted-foreground">
+                          {header}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="[&_tr:last-child]:border-0">
+                    {((formData[field.name] && typeof formData[field.name] === 'object' && (formData[field.name] as TableFormData).cells) || (field.tableData && field.tableData.cells) || (field.tableData && Array(field.tableData.rows).fill(null).map(() => Array(field.tableData.columns).fill('')))).map((row: string[], rowIndex: number) => (
+                      <tr key={`${field.name}-row-${rowIndex}`} className="border-b transition-colors hover:bg-muted/50">
+                        {row.map((cell: string, cellIndex: number) => (
+                          <td key={`${field.name}-cell-${rowIndex}-${cellIndex}`} className="p-2 align-middle">
+                            <Input
+                              value={typeof cell === 'string' ? cell : ''}
+                              onChange={e => {
+                                if (!field.tableData) return;
+                                const newTable = (formData[field.name] && typeof formData[field.name] === 'object' && (formData[field.name] as TableFormData).cells)
+                                  ? (formData[field.name] as TableFormData).cells.map((r: string[], i: number) => i === rowIndex ? r.map((c, j) => j === cellIndex ? e.target.value : c) : r)
+                                  : (field.tableData.cells ? field.tableData.cells.map(r => [...r]) : Array(field.tableData.rows).fill(null).map(() => Array(field.tableData.columns).fill('')));
+                                newTable[rowIndex][cellIndex] = e.target.value;
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  [field.name]: {
+                                    ...(prev[field.name] as TableFormData),
+                                    cells: newTable,
+                                    headers: field.tableData.headers,
+                                    rows: newTable.length,
+                                    columns: field.tableData.columns
+                                  }
+                                }));
+                              }}
+                              className="border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 p-1 h-auto"
+                              placeholder={`Cell ${rowIndex+1},${cellIndex+1}`}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="flex justify-end p-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      if (!field.tableData) return;
+                      const current = (formData[field.name] && typeof formData[field.name] === 'object' && (formData[field.name] as TableFormData).cells) || field.tableData.cells || Array(field.tableData.rows).fill(null).map(() => Array(field.tableData.columns).fill(''));
+                      const newRow = Array(field.tableData.columns).fill('');
+                      const newTable = [...current, newRow];
+                      setFormData((prev) => ({
+                        ...prev,
+                        [field.name]: {
+                          ...(prev[field.name] as TableFormData),
+                          cells: newTable,
+                          headers: field.tableData.headers,
+                          rows: newTable.length,
+                          columns: field.tableData.columns
+                        }
+                      }));
+                    }}
+                  >
+                    + Add Row
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="p-4 border rounded-md bg-muted/50 text-muted-foreground">Table data not available</div>

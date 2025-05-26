@@ -189,6 +189,63 @@ export const getJournalEntries = async (): Promise<JournalEntry[]> => {
   return entries;
 };
 
+// Get journal entries filtered by template ID
+export const getJournalEntriesByTemplate = async (templateId: string | null): Promise<JournalEntry[]> => {
+  const user = getCurrentUser();
+  
+  let q;
+  if (templateId === null) {
+    // Get entries without a template
+    q = query(
+      journalCollection(),
+      where("userId", "==", user.uid),
+      where("templateId", "==", null),
+      orderBy("createdAt", "desc")
+    );
+  } else {
+    // Get entries with specific template
+    q = query(
+      journalCollection(),
+      where("userId", "==", user.uid),
+      where("templateId", "==", templateId),
+      orderBy("createdAt", "desc")
+    );
+  }
+  
+  const querySnapshot = await getDocs(q);
+  const entries: JournalEntry[] = [];
+  
+  querySnapshot.forEach((doc) => {
+    entries.push({
+      ...doc.data(),
+      id: doc.id
+    } as JournalEntry);
+  });
+  
+  return entries;
+};
+
+// Get template usage statistics
+export const getTemplateUsageStats = async (): Promise<Record<string, number>> => {
+  const user = getCurrentUser();
+  
+  const q = query(
+    journalCollection(),
+    where("userId", "==", user.uid)
+  );
+  
+  const querySnapshot = await getDocs(q);
+  const templateUsage: Record<string, number> = {};
+  
+  querySnapshot.forEach((doc) => {
+    const data = doc.data();
+    const templateId = data.templateId || 'no-template';
+    templateUsage[templateId] = (templateUsage[templateId] || 0) + 1;
+  });
+  
+  return templateUsage;
+};
+
 // Get all journal entries for a specific user (for server-side operations)
 export const getAllJournalEntries = async (userId: string): Promise<JournalEntry[]> => {
   if (!userId) {

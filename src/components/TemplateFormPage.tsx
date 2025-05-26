@@ -1,3 +1,37 @@
+/**
+ * TemplateFormPage Component
+ * 
+ * A complex form component for creating and editing journal templates.
+ * Provides a rich interface for managing template metadata and fields.
+ * 
+ * Key features:
+ * - Template name and description
+ * - Drag and drop field reordering
+ * - Multiple field types (text, textarea, boolean, mantra, table)
+ * - Field configuration options
+ * - Table field editor with presets
+ * - Responsive layout
+ * 
+ * Design patterns:
+ * - Uses controlled form inputs
+ * - Local state management for field data
+ * - Composition for field type components
+ * - Drag and drop using hello-pangea/dnd
+ * - Toast notifications for user feedback
+ * - Responsive sidebar layout
+ * 
+ * Component hierarchy:
+ * - TemplateFormPage
+ *   - AppSidebar 
+ *   - Header (breadcrumbs, actions)
+ *   - Main content
+ *     - Template metadata form
+ *     - Field list
+ *       - Field items (draggable)
+ *       - Add field buttons
+ *     - TableEditor (for table fields)
+ */
+
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -31,7 +65,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 
-// Generate a valid field name from a display label
+/**
+ * Generates a valid field name from a display label
+ * Converts spaces and special chars to underscores
+ * Ensures uniqueness and valid format for database
+ */
 const generateFieldName = (label: string): string => {
   return label
     .toLowerCase()
@@ -43,16 +81,23 @@ const generateFieldName = (label: string): string => {
     || 'field';                 // Fallback if empty
 };
 
-// Field types and their corresponding icons/labels
+/**
+ * Field type definitions with icons and labels
+ * Used for the field type selector and add field menu
+ */
 const FIELD_TYPES = [
   { id: "text", label: "Short Text", icon: Type },
   { id: "textarea", label: "Long Text", icon: AlignLeft },
   { id: "boolean", label: "Checkbox", icon: ToggleLeft },
   { id: "mantra", label: "Mantra", icon: Quote },
-  { id: "table", label: "Table", icon: TableIcon }
+  { id: "table", label: "Static Table", icon: TableIcon },
+  { id: "fillable_table", label: "Fillable Table", icon: TableIcon }
 ];
 
-// Interface for a template field item
+/**
+ * Extended interface for template fields
+ * Adds unique ID for drag/drop functionality
+ */
 interface FieldItem extends TemplateField {
   id: string;
 }
@@ -65,11 +110,11 @@ export function TemplateFormPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [templateId, setTemplateId] = useState<string | undefined>(undefined);
   
-  // Template metadata
+  // Template metadata state
   const [templateName, setTemplateName] = useState("");
   const [templateDescription, setTemplateDescription] = useState("");
   
-  // Fields state
+  // Fields state with default first field
   const [fields, setFields] = useState<FieldItem[]>([
     {
       id: "field-" + Date.now(),
@@ -81,9 +126,10 @@ export function TemplateFormPage() {
     }
   ]);
   
+  // State for add field menu positioning
   const [activeAddMenu, setActiveAddMenu] = useState<number | null>(null);
   
-  // Load existing template if editing
+  // Load existing template data when editing
   useEffect(() => {
     const id = params?.id as string;
     
@@ -125,8 +171,8 @@ export function TemplateFormPage() {
       label: getDefaultLabel(type),
       placeholder: getDefaultPlaceholder(type),
       required: false,
-      // Initialize table data with default headers if it's a table
-      ...(type === 'table' ? {
+      // Initialize table data with default headers if it's a table or fillable_table
+      ...(type === 'table' || type === 'fillable_table' ? {
         tableData: {
           rows: 3,
           columns: 3,
@@ -158,6 +204,7 @@ export function TemplateFormPage() {
       case "boolean": return "Yes/No Question";
       case "mantra": return "Daily Mantra";
       case "table": return "Data Table";
+      case "fillable_table": return "Interactive Table";
       default: return "New Field";
     }
   };
@@ -190,7 +237,11 @@ export function TemplateFormPage() {
     }
   };
   
-  // Table Editor Component
+  /**
+   * TableEditor Component
+   * Provides interface for configuring table fields
+   * Includes row/column management and content presets
+   */
   const TableEditor = ({ field, onUpdate }: { field: FieldItem, onUpdate: (updates: Partial<FieldItem>) => void }) => {
     // Initialize table data if it doesn't exist
     const tableData = field.tableData || { rows: 3, columns: 3, headers: Array(3).fill(""), cells: Array(3).fill(Array(3).fill("")) };
@@ -519,9 +570,15 @@ export function TemplateFormPage() {
           label: field.label,
           placeholder: field.placeholder || "",
           required: field.required || false,
-          // Include tableData for table fields
-          ...(field.type === 'table' && field.tableData ? {
-            tableData: field.tableData
+          // Include tableData for table and fillable_table fields
+          ...((field.type === 'table' || field.type === 'fillable_table') && field.tableData ? {
+            tableData: {
+              rows: field.tableData.rows,
+              columns: field.tableData.columns,
+              headers: field.tableData.headers,
+              // Convert cells array to JSON string to avoid Firestore nested array limitation
+              cellsJson: JSON.stringify(field.tableData.cells || [])
+            }
           } : {})
         }))
       };
@@ -549,7 +606,11 @@ export function TemplateFormPage() {
     }
   };
   
-  // The "+" button component to insert between fields
+  /**
+   * AddFieldButton Component
+   * Renders a button between fields to add new fields
+   * Shows a popup menu with field type options
+   */
   const AddFieldButton = ({ index }: { index: number }) => (
     <div className="relative" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-center my-2">
@@ -803,7 +864,7 @@ export function TemplateFormPage() {
                                               </div>
                                             )}
                                             
-                                            {field.type === "table" && (
+                                            {field.type === "table" || field.type === "fillable_table" && (
                                               <div className="col-span-2 mt-4">
                                                 <label className="text-sm font-medium mb-2 block">
                                                   Table Data

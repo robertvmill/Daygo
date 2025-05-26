@@ -33,6 +33,8 @@ import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import Link from "next/link";
 import { Timestamp } from "firebase/firestore";
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 
 export function JournalEntryView() {
   const params = useParams();
@@ -41,6 +43,9 @@ export function JournalEntryView() {
   const [template, setTemplate] = useState<{ fields: TemplateField[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editData, setEditData] = useState<Record<string, any>>({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const fetchEntry = async () => {
@@ -77,6 +82,31 @@ export function JournalEntryView() {
 
     fetchEntry();
   }, [params, router]);
+
+  useEffect(() => {
+    if (entry && template) {
+      // Prepare editData from entry fields
+      const initial: Record<string, any> = {};
+      template.fields.forEach(field => {
+        if (field.type === 'fillable_table') {
+          // Parse JSON string to 2D array
+          try {
+            initial[field.name] = {
+              ...field.tableData,
+              cells: entry.templateFields?.[field.name]
+                ? JSON.parse(entry.templateFields[field.name] as string)
+                : (field.tableData?.cells || [])
+            };
+          } catch {
+            initial[field.name] = { ...field.tableData, cells: [] };
+          }
+        } else {
+          initial[field.name] = entry.templateFields?.[field.name] || '';
+        }
+      });
+      setEditData(initial);
+    }
+  }, [entry, template]);
 
   const handleDelete = async () => {
     if (!entry) return;
@@ -116,8 +146,141 @@ export function JournalEntryView() {
     }).format(date);
   };
   
+  const handleEditField = (name: string, value: any) => {
+    setEditData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleTableCellChange = (fieldName: string, rowIdx: number, colIdx: number, value: string) => {
+    setEditData(prev => {
+      const table = { ...prev[fieldName] };
+      const cells = table.cells.map((row: string[], r: number) =>
+        r === rowIdx ? row.map((cell: string, c: number) => c === colIdx ? value : cell) : row
+      );
+      return { ...prev, [fieldName]: { ...table, cells } };
+    });
+  };
+
+  const handleAddTableRow = (fieldName: string) => {
+    setEditData(prev => {
+      const table = { ...prev[fieldName] };
+      const newRow = Array(table.columns).fill('');
+      return {
+        ...prev,
+        [fieldName]: {
+          ...table,
+          cells: [...table.cells, newRow],
+          rows: table.rows + 1
+        }
+      };
+    });
+  };
+
+  const handleSave = async () => {
+    if (!entry) return;
+    setSaving(true);
+    try {
+      // Prepare templateFields for update
+      const templateFields: Record<string, string | undefined> = {};
+      template?.fields.forEach(field => {
+        if (field.type === 'fillable_table') {
+          templateFields[field.name] = JSON.stringify(editData[field.name].cells);
+        } else if (typeof editData[field.name] === 'boolean') {
+          templateFields[field.name] = editData[field.name] ? 'true' : 'false';
+        } else {
+          templateFields[field.name] = editData[field.name];
+        }
+      });
+      await updateJournalEntry(entry.id, { templateFields });
+      toast.success('Journal entry updated');
+      setEditMode(false);
+      // Optionally, reload entry
+      router.refresh();
+    } catch (err) {
+      toast.error('Failed to update journal entry');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Render a template field based on its type
   const renderField = (field: TemplateField) => {
+    if (editMode) {
+      // Editable mode
+      switch (field.type) {
+        case 'text':
+          return (
+            <div className="mb-4">
+              <h3 className="text-base font-semibold mb-1">{field.label}</h3>
+              <Input
+                value={editData[field.name] || ''}
+                onChange={e => handleEditField(field.name, e.target.value)}
+              />
+            </div>
+          );
+        case 'textarea':
+          return (
+            <div className="mb-4">
+              <h3 className="text-base font-semibold mb-1">{field.label}</h3>
+              <Textarea
+                value={editData[field.name] || ''}
+                onChange={e => handleEditField(field.name, e.target.value)}
+              />
+            </div>
+          );
+        case 'boolean':
+          return (
+            <div className="mb-4">
+              <h3 className="text-base font-semibold mb-1">{field.label}</h3>
+              <input
+                type="checkbox"
+                checked={editData[field.name] === 'true' || editData[field.name] === true}
+                onChange={e => handleEditField(field.name, e.target.checked)}
+              />
+            </div>
+          );
+        case 'fillable_table': {
+          const table = editData[field.name];
+          if (!table) return null;
+          return (
+            <div className="mb-4">
+              <h3 className="text-base font-semibold mb-1">{field.label}</h3>
+              <div className="border rounded-md overflow-x-auto">
+                <table className="w-full caption-bottom text-sm">
+                  <thead className="[&_tr]:border-b">
+                    <tr className="border-b transition-colors">
+                      {table.headers.map((header: string, idx: number) => (
+                        <th key={idx} className="h-10 px-2 text-left align-middle font-medium">{header}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="[&_tr:last-child]:border-0">
+                    {table.cells.map((row: string[], rowIdx: number) => (
+                      <tr key={rowIdx} className="border-b transition-colors hover:bg-muted/50">
+                        {row.map((cell: string, colIdx: number) => (
+                          <td key={colIdx} className="p-2 align-middle">
+                            <Input
+                              value={cell}
+                              onChange={e => handleTableCellChange(field.name, rowIdx, colIdx, e.target.value)}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="flex justify-end p-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => handleAddTableRow(field.name)}>
+                    + Add Row
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+        default:
+          return null;
+      }
+    }
     if (!entry?.templateFields) return null;
     const value = entry.templateFields[field.name];
     
@@ -234,14 +397,36 @@ export function JournalEntryView() {
               </CardContent>
               <CardFooter className="flex justify-between">
                 <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => router.push(`/journal/edit/${entry.id}`)}
-                  >
-                    <Edit className="h-4 w-4 mr-2" />
-                    Edit
-                  </Button>
+                  {!editMode && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditMode(true)}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
+                  )}
+                  {editMode && (
+                    <>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={handleSave}
+                        disabled={saving}
+                      >
+                        {saving ? 'Saving...' : 'Save'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => { setEditMode(false); setEditData({}); }}
+                        disabled={saving}
+                      >
+                        Cancel
+                      </Button>
+                    </>
+                  )}
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button variant="destructive" size="sm">

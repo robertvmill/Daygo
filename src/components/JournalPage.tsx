@@ -7,18 +7,30 @@ import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { getJournalEntries } from '@/services/journalService'
-import { JournalEntry } from '@/types/journal'
+import { getTemplates } from '@/services/templateService'
+import { JournalEntry, JournalTemplate } from '@/types/journal'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Eye, Plus } from 'lucide-react'
+import { Eye, Plus, Filter, X } from 'lucide-react'
 import { Calendar } from 'lucide-react'
 import { Timestamp } from 'firebase/firestore'
 import { getAuth, onAuthStateChanged } from "firebase/auth"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
 
 export function JournalPage() {
   const [entries, setEntries] = useState<JournalEntry[]>([])
+  const [allEntries, setAllEntries] = useState<JournalEntry[]>([])
+  const [templates, setTemplates] = useState<JournalTemplate[]>([])
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [authInitialized, setAuthInitialized] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -37,7 +49,7 @@ export function JournalPage() {
     return () => unsubscribe()
   }, [])
 
-  // Only fetch entries when authenticated and have userId
+  // Fetch templates and entries when authenticated
   useEffect(() => {
     if (!authInitialized) return
     if (!isAuthenticated || !userId) {
@@ -45,22 +57,46 @@ export function JournalPage() {
       return
     }
 
-    const fetchEntries = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true)
-        const fetchedEntries = await getJournalEntries()
+        
+        // Fetch both templates and entries
+        const [fetchedEntries, fetchedTemplates] = await Promise.all([
+          getJournalEntries(),
+          getTemplates()
+        ])
+        
+        setAllEntries(fetchedEntries)
         setEntries(fetchedEntries)
+        setTemplates(fetchedTemplates)
       } catch (error) {
-        console.error('Error fetching journal entries:', error)
-        toast.error('Failed to load journal entries')
+        console.error('Error fetching data:', error)
+        toast.error('Failed to load journal data')
+        setAllEntries([])
         setEntries([])
+        setTemplates([])
       } finally {
         setLoading(false)
       }
     }
 
-    fetchEntries()
+    fetchData()
   }, [authInitialized, isAuthenticated, userId])
+
+  // Filter entries when template selection changes
+  useEffect(() => {
+    if (selectedTemplateId === null) {
+      // Show all entries
+      setEntries(allEntries)
+    } else if (selectedTemplateId === 'no-template') {
+      // Show entries without templates
+      setEntries(allEntries.filter(entry => !entry.templateId))
+    } else {
+      // Show entries for specific template
+      setEntries(allEntries.filter(entry => entry.templateId === selectedTemplateId))
+    }
+  }, [selectedTemplateId, allEntries])
 
   const formatDate = (timestamp: Timestamp | Date | undefined | null) => {
     if (!timestamp) return '';
@@ -84,6 +120,26 @@ export function JournalPage() {
 
   const handleLogin = () => {
     router.push("/login")
+  }
+
+  const clearFilter = () => {
+    setSelectedTemplateId(null)
+  }
+
+  const getTemplateById = (templateId: string) => {
+    return templates.find(template => template.id === templateId)
+  }
+
+  const getFilteredEntriesCount = () => {
+    if (selectedTemplateId === null) return allEntries.length
+    if (selectedTemplateId === 'no-template') {
+      return allEntries.filter(entry => !entry.templateId).length
+    }
+    return allEntries.filter(entry => entry.templateId === selectedTemplateId).length
+  }
+
+  const getNoTemplateEntriesCount = () => {
+    return allEntries.filter(entry => !entry.templateId).length
   }
 
   // If not authenticated, show a message
@@ -151,50 +207,135 @@ export function JournalPage() {
             </Button>
           </div>
 
+          {/* Filter Section */}
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between border rounded-lg p-4 bg-muted/20">
+            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center flex-1">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4" />
+                <span className="text-sm font-medium">Filter by Template:</span>
+              </div>
+              
+              <Select value={selectedTemplateId || "all"} onValueChange={(value) => setSelectedTemplateId(value === "all" ? null : value)}>
+                <SelectTrigger className="w-[280px]">
+                  <SelectValue placeholder="All entries" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All entries ({allEntries.length})</SelectItem>
+                  <SelectItem value="no-template">No template ({getNoTemplateEntriesCount()})</SelectItem>
+                  {templates.map((template) => {
+                    const count = allEntries.filter(entry => entry.templateId === template.id).length
+                    return (
+                      <SelectItem key={template.id} value={template.id}>
+                        {template.name} ({count})
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+
+              {selectedTemplateId && (
+                <Button variant="outline" size="sm" onClick={clearFilter}>
+                  <X className="h-4 w-4 mr-1" />
+                  Clear Filter
+                </Button>
+              )}
+            </div>
+
+            <div className="text-sm text-muted-foreground">
+              Showing {getFilteredEntriesCount()} of {allEntries.length} entries
+            </div>
+          </div>
+
+          {/* Active Filter Indicator */}
+          {selectedTemplateId && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Active filter:</span>
+              <Badge variant="secondary" className="flex items-center gap-1">
+                {selectedTemplateId === 'no-template' 
+                  ? 'No Template' 
+                  : getTemplateById(selectedTemplateId)?.name || 'Unknown Template'
+                }
+                <X className="h-3 w-3 cursor-pointer" onClick={clearFilter} />
+              </Badge>
+            </div>
+          )}
+
           {loading ? (
             <div className="flex justify-center py-10">
               <div className="animate-pulse">Loading entries...</div>
             </div>
           ) : entries.length === 0 ? (
             <div className="text-center py-10 border rounded-lg">
-              <h3 className="text-lg font-medium">No journal entries yet</h3>
-              <p className="text-muted-foreground mt-1">Create your first entry to get started</p>
-              <Button asChild className="mt-4">
-                <Link href="/journal/select-template">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Entry
-                </Link>
-              </Button>
+              {selectedTemplateId ? (
+                <>
+                  <h3 className="text-lg font-medium">No entries found for this filter</h3>
+                  <p className="text-muted-foreground mt-1">
+                    Try selecting a different template or clearing the filter
+                  </p>
+                  <div className="flex gap-2 justify-center mt-4">
+                    <Button variant="outline" onClick={clearFilter}>
+                      Clear Filter
+                    </Button>
+                    <Button asChild>
+                      <Link href="/journal/select-template">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Create Entry
+                      </Link>
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-lg font-medium">No journal entries yet</h3>
+                  <p className="text-muted-foreground mt-1">Create your first entry to get started</p>
+                  <Button asChild className="mt-4">
+                    <Link href="/journal/select-template">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create Entry
+                    </Link>
+                  </Button>
+                </>
+              )}
             </div>
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {entries.map((entry) => (
-                <Card key={entry.id} className="overflow-hidden flex flex-col">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="truncate">{entry.title}</CardTitle>
-                    <CardDescription className="flex items-center">
-                      <Calendar className="h-3 w-3 mr-1 inline" />
-                      {formatDate(entry.createdAt)}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex-1">
-                    <p className="line-clamp-3 text-sm text-muted-foreground">
-                      {entry.content}
-                    </p>
-                  </CardContent>
-                  <CardFooter className="pt-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="w-full" 
-                      onClick={() => router.push(`/journal/${entry.id}`)}
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      Read More
-                    </Button>
-                  </CardFooter>
-                </Card>
-              ))}
+              {entries.map((entry) => {
+                const template = entry.templateId ? getTemplateById(entry.templateId) : null
+                return (
+                  <Card key={entry.id} className="overflow-hidden flex flex-col">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="truncate flex-1">{entry.title}</CardTitle>
+                        {template && (
+                          <Badge variant="outline" className="shrink-0 text-xs">
+                            {template.name}
+                          </Badge>
+                        )}
+                      </div>
+                      <CardDescription className="flex items-center">
+                        <Calendar className="h-3 w-3 mr-1 inline" />
+                        {formatDate(entry.createdAt)}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex-1">
+                      <p className="line-clamp-3 text-sm text-muted-foreground">
+                        {entry.content}
+                      </p>
+                    </CardContent>
+                    <CardFooter className="pt-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="w-full" 
+                        onClick={() => router.push(`/journal/${entry.id}`)}
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        Read More
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                )
+              })}
             </div>
           )}
         </main>
