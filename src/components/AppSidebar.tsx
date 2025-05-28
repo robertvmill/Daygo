@@ -12,7 +12,7 @@ import {
   SidebarMenuButton,
   SidebarRail
 } from "@/components/ui/sidebar"
-import { File, FileText, LogOut, Plus, ShieldCheck, User, Book, Users, Bot } from "lucide-react"
+import { File, FileText, LogOut, Plus, ShieldCheck, User, Book, Users, Bot, BarChart3 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { getAuth, User as FirebaseUser } from "firebase/auth"
 import { useEffect, useState } from "react"
@@ -85,6 +85,15 @@ export function AppSidebar() {
               <Link href="/journal">
                 <File className="mr-2 h-4 w-4" />
                 <span>Journal</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith("/dayscore")}>
+              <Link href="/dayscore">
+                <BarChart3 className="mr-2 h-4 w-4" />
+                <span>DayScore</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

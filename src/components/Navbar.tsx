@@ -17,7 +17,8 @@ import {
   User, 
   ShieldCheck, 
   LogOut,
-  Search 
+  Search,
+  BarChart3
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { getAuth, User as FirebaseUser } from "firebase/auth";
@@ -81,6 +82,7 @@ export function Navbar() {
   const mainMenuItems = [
     { href: "/home", label: "Home", icon: FileText },
     { href: "/journal", label: "Journal", icon: File },
+    { href: "/dayscore", label: "DayScore", icon: BarChart3 },
     { href: "/templates", label: "Templates", icon: FileText },
     { href: "/ai-chat", label: "Talk to Daygo AI", icon: Bot },
     { href: "/community", label: "Community", icon: Users },
