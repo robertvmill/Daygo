@@ -12,7 +12,7 @@ import {
   SidebarMenuButton,
   SidebarRail
 } from "@/components/ui/sidebar"
-import { File, FileText, LogOut, Plus, ShieldCheck, User, Book, Users, Bot, BarChart3 } from "lucide-react"
+import { File, FileText, LogOut, Plus, ShieldCheck, User, Book, Users, Bot, BarChart3, Clock } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { getAuth, User as FirebaseUser } from "firebase/auth"
 import { useEffect, useState } from "react"
@@ -99,6 +99,15 @@ export function AppSidebar() {
           </SidebarMenuItem>
           
           <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith("/countdown")}>
+              <Link href="/countdown">
+                <Clock className="mr-2 h-4 w-4" />
+                <span>Countdowns</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          
+          <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith("/templates")}>
               <Link href="/templates">
                 <FileText className="mr-2 h-4 w-4" />
@@ -143,6 +152,15 @@ export function AppSidebar() {
               <Link href="/templates/new">
                 <Plus className="mr-2 h-4 w-4" />
                 <span>New Template</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild>
+              <Link href="/countdown/new">
+                <Plus className="mr-2 h-4 w-4" />
+                <span>New Countdown</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

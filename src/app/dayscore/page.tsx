@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { DayScore } from "@/types/journal";
 import { getDayScore, getDayScoreTemplates, createDayScore, formatDate } from "@/services/dayScoreService";
 import { toast } from "sonner";
+import { CountdownWidget } from "@/components/CountdownWidget";
 
 export default function DayScorePage() {
   // Selected date state (defaults to today)
@@ -385,6 +386,9 @@ export default function DayScorePage() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Countdown Widget */}
+            <CountdownWidget maxEvents={2} />
 
             {/* Getting Started */}
             <Card>

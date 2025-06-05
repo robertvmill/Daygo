@@ -59,4 +59,20 @@ export type DayScore = {
   updatedAt?: Timestamp;
   isTemplate?: boolean;     // If this is a template for recurring days
   templateName?: string;    // Name for template days
+};
+
+// Countdown types
+export type CountdownEvent = {
+  id: string;
+  userId: string;
+  title: string;
+  description?: string;
+  targetDate: Timestamp;
+  category?: 'work' | 'personal' | 'travel' | 'health' | 'education' | 'celebration' | 'other';
+  priority?: 'low' | 'medium' | 'high';
+  color?: string; // Hex color for the countdown display
+  isActive: boolean;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+  reminderDays?: number[]; // Days before event to show reminders (e.g., [30, 7, 1])
 }; 
