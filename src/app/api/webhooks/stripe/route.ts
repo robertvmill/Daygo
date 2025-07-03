@@ -2,7 +2,7 @@
 // This updates user subscription status in Firestore when Stripe processes payments
 
 import { NextRequest, NextResponse } from 'next/server';
-import { stripe, STRIPE_CONFIG } from '@/lib/stripe';
+import { getStripeServer, STRIPE_CONFIG } from '@/lib/stripe';
 import { updateSubscriptionTier } from '@/services/subscriptionService';
 import Stripe from 'stripe';
 
@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
     // Verify webhook signature
     let event: Stripe.Event;
     try {
+      const stripe = getStripeServer();
       event = stripe.webhooks.constructEvent(
         body,
         signature,
@@ -64,7 +65,8 @@ export async function POST(req: NextRequest) {
         const invoice = event.data.object as Stripe.Invoice;
         if (invoice.subscription) {
           // Reactivate subscription if payment succeeds after failure
-          const subscription = await stripe.subscriptions.retrieve(
+          const stripeServer = getStripeServer();
+          const subscription = await stripeServer.subscriptions.retrieve(
             invoice.subscription as string
           );
           await handleSubscriptionChange(subscription, 'active');
@@ -75,7 +77,8 @@ export async function POST(req: NextRequest) {
       case 'invoice.payment_failed': {
         const invoice = event.data.object as Stripe.Invoice;
         if (invoice.subscription) {
-          const subscription = await stripe.subscriptions.retrieve(
+          const stripeServer = getStripeServer();
+          const subscription = await stripeServer.subscriptions.retrieve(
             invoice.subscription as string
           );
           await handleSubscriptionChange(subscription, 'past_due');

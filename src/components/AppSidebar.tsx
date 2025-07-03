@@ -12,7 +12,7 @@ import {
   SidebarMenuButton,
   SidebarRail
 } from "@/components/ui/sidebar"
-import { File, FileText, LogOut, Plus, ShieldCheck, User, Book, Users, Bot, BarChart3, Clock } from "lucide-react"
+import { File, FileText, LogOut, Plus, ShieldCheck, User, Book, Users, Bot, BarChart3, Clock, Crown } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { getAuth, User as FirebaseUser } from "firebase/auth"
 import { useEffect, useState } from "react"
@@ -168,6 +168,15 @@ export function AppSidebar() {
         
         <SidebarMenu className="mt-6">
           <h3 className="px-4 py-2 text-sm font-medium">Account</h3>
+          
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild>
+              <Link href="/upgrade" className="text-primary font-medium">
+                <Crown className="mr-2 h-4 w-4" />
+                <span>Upgrade to Pro</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           
           <SidebarMenuItem>
             <SidebarMenuButton asChild>

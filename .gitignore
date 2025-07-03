@@ -45,3 +45,9 @@ firebase-debug.log
 # Large image files
 liza_g_books.png
 liza_golzan_interior.png
+
+# Environment files with secrets
+.env
+.env.backup
+.env.local
+.env.production

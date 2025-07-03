@@ -1,37 +1,32 @@
-// Stripe configuration for Daygo subscription system
-// This file handles both client-side and server-side Stripe initialization
+// Server-side Stripe configuration for Daygo
+// This file contains server-only code and should never be imported on the client
 
-import { loadStripe, Stripe } from '@stripe/stripe-js';
-
-// Client-side Stripe instance (singleton pattern)
-let stripePromise: Promise<Stripe | null>;
-
-export const getStripe = () => {
-  if (!stripePromise) {
-    const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-    
-    if (!publishableKey) {
-      throw new Error('Missing NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY environment variable');
-    }
-    
-    stripePromise = loadStripe(publishableKey);
-  }
-  return stripePromise;
-};
-
-// Server-side Stripe configuration
 import Stripe from 'stripe';
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('Missing STRIPE_SECRET_KEY environment variable');
-}
+// Server-side Stripe instance (lazy initialization)
+let stripeInstance: Stripe | null = null;
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2024-11-20.acacia', // Use latest API version
-  typescript: true,
-});
+export const getStripeServer = (): Stripe => {
+  // Only initialize on server-side
+  if (typeof window !== 'undefined') {
+    throw new Error('Server-side Stripe instance cannot be used on the client');
+  }
+  
+  if (!stripeInstance) {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      throw new Error('Missing STRIPE_SECRET_KEY environment variable');
+    }
+    
+    stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2024-11-20.acacia', // Use latest API version
+      typescript: true,
+    });
+  }
+  
+  return stripeInstance;
+};
 
-// Subscription configuration
+// Subscription configuration (server-side)
 export const STRIPE_CONFIG = {
   // Price IDs from your Stripe Dashboard (create these in Products section)
   prices: {
@@ -50,16 +45,12 @@ export const STRIPE_CONFIG = {
   cancelUrl: '/upgrade?canceled=true',
 } as const;
 
-// Helper function to format currency
-export const formatPrice = (amount: number, currency: string = 'usd') => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency.toUpperCase(),
-  }).format(amount / 100);
-};
-
-// Validate required environment variables
+// Validate required environment variables (server-side only)
 export const validateStripeConfig = () => {
+  if (typeof window !== 'undefined') {
+    return; // Skip validation on client-side
+  }
+  
   const required = [
     'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY',
     'STRIPE_SECRET_KEY',

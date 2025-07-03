@@ -85,8 +85,8 @@ export function UsageLimitBanner({
   const templatePercentage = getUsagePercentage(usage.templatesCount, limits.maxTemplates);
   
   // Determine if user is approaching or at limits
-  const isApproachingJournalLimit = journalPercentage >= 80;
-  const isApproachingTemplateLimit = templatePercentage >= 80;
+  const isApproachingJournalLimit = journalPercentage >= 40;
+  const isApproachingTemplateLimit = templatePercentage >= 40;
   const isAtAnyLimit = journalPercentage >= 100 || templatePercentage >= 100;
 
   // Don't show banner for pro/team users unless they want detailed view

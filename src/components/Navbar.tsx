@@ -18,9 +18,10 @@ import {
   ShieldCheck, 
   LogOut,
   Search,
-  BarChart3
+  BarChart3,
+  Crown
 } from "lucide-react";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { getAuth, User as FirebaseUser } from "firebase/auth";
 import { signOut } from "@/lib/authUtils";
 import { toast } from "sonner";
@@ -94,6 +95,7 @@ export function Navbar() {
   ];
 
   const accountItems = [
+    { href: "/upgrade", label: "Upgrade to Pro", icon: Crown },
     { href: "/account", label: "Account Settings", icon: User },
     { href: "/privacy", label: "Privacy", icon: ShieldCheck },
   ];
@@ -116,6 +118,7 @@ export function Navbar() {
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="w-[18rem] p-0 flex flex-col">
+            <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
             {/* Header section with logo */}
             <div className="flex h-14 items-center px-4 border-b">
               <Link
@@ -198,7 +201,9 @@ export function Navbar() {
                       className={`flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground ${
                         pathname === item.href
                           ? "bg-accent text-accent-foreground"
-                          : "text-foreground/80"
+                          : item.href === "/upgrade" 
+                            ? "text-primary font-medium"
+                            : "text-foreground/80"
                       }`}
                     >
                       <item.icon className="h-4 w-4" />

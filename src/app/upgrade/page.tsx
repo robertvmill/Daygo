@@ -13,7 +13,7 @@ import { UsageLimitBanner } from "@/components/UsageLimitBanner";
 import { PRICING, SUBSCRIPTION_TIERS } from "@/types/subscription";
 import { getUserSubscription, getUserUsage } from "@/services/subscriptionService";
 import type { UserSubscription, UsageStats } from "@/types/subscription";
-import { STRIPE_CONFIG } from "@/lib/stripe";
+// No need to import stripe config - we'll use env variables directly
 import { getAuth } from "firebase/auth";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -53,10 +53,10 @@ export default function UpgradePage() {
         return;
       }
 
-      // Get the price ID for Pro plan
-      const priceId = STRIPE_CONFIG.prices.pro;
-      if (!priceId || priceId === 'price_pro_monthly') {
-        toast.error('Pro plan pricing not configured. Please set STRIPE_PRO_PRICE_ID in your environment variables.');
+      // Get the price ID for Pro plan from environment variables
+      const priceId = process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID;
+      if (!priceId) {
+        toast.error('Pro plan pricing not configured. Please set NEXT_PUBLIC_STRIPE_PRO_PRICE_ID in your environment variables.');
         return;
       }
 

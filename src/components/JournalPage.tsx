@@ -14,7 +14,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Eye, Plus, Filter, X } from 'lucide-react'
+import { Eye, Plus, Filter, X, Crown } from 'lucide-react'
 import { Calendar } from 'lucide-react'
 import { Timestamp } from 'firebase/firestore'
 import { getAuth, onAuthStateChanged } from "firebase/auth"
@@ -26,6 +26,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { getUserUsage, getUserSubscription } from '@/services/subscriptionService'
+import { SubscriptionTier, SUBSCRIPTION_TIERS } from '@/types/subscription'
 
 export function JournalPage() {
   const [entries, setEntries] = useState<JournalEntry[]>([])
@@ -36,6 +38,8 @@ export function JournalPage() {
   const [authInitialized, setAuthInitialized] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
+  const [userTier, setUserTier] = useState<SubscriptionTier>('free')
+  const [currentUsage, setCurrentUsage] = useState({ journalEntries: 0, templates: 0 })
   const router = useRouter()
 
   // Check authentication first
@@ -62,15 +66,22 @@ export function JournalPage() {
       try {
         setLoading(true)
         
-        // Fetch both templates and entries
-        const [fetchedEntries, fetchedTemplates] = await Promise.all([
+        // Fetch templates, entries, subscription, and usage info
+        const [fetchedEntries, fetchedTemplates, subscription, usageInfo] = await Promise.all([
           getJournalEntries(),
-          getTemplates()
+          getTemplates(),
+          getUserSubscription(),
+          getUserUsage()
         ])
         
         setAllEntries(fetchedEntries)
         setEntries(fetchedEntries)
         setTemplates(fetchedTemplates)
+        setUserTier(subscription?.tier || 'free')
+        setCurrentUsage({ 
+          journalEntries: usageInfo.journalEntriesCount, 
+          templates: usageInfo.templatesCount 
+        })
       } catch (error) {
         console.error('Error fetching data:', error)
         toast.error('Failed to load journal data')
@@ -196,6 +207,19 @@ export function JournalPage() {
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
+          {userTier === 'free' && (
+            <div className="ml-auto flex items-center gap-2">
+              <Badge variant="outline" className="text-xs">
+                {currentUsage.journalEntries}/{SUBSCRIPTION_TIERS.free.maxJournalEntries} entries
+              </Badge>
+              <Link href="/upgrade">
+                <Button size="sm" variant="ghost" className="text-primary">
+                  <Crown className="h-4 w-4 mr-1" />
+                  Upgrade Pro
+                </Button>
+              </Link>
+            </div>
+          )}
         </header>
         <main className="flex flex-1 flex-col gap-4 p-4 md:p-8">
           {/* Usage limit banner for subscription management */}

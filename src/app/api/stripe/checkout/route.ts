@@ -2,7 +2,7 @@
 // This handles the subscription upgrade flow from the upgrade page
 
 import { NextRequest, NextResponse } from 'next/server';
-import { stripe, STRIPE_CONFIG, type SubscriptionMetadata, type CustomerMetadata } from '@/lib/stripe';
+import { getStripeServer, STRIPE_CONFIG, type SubscriptionMetadata, type CustomerMetadata } from '@/lib/stripe';
 import { getAuth } from 'firebase-admin/auth';
 import { initAdmin } from '@/lib/firebase-admin';
 
@@ -26,16 +26,33 @@ export async function POST(req: NextRequest) {
     let userName: string | undefined;
 
     try {
-      const decodedToken = await getAuth().verifyIdToken(token);
-      userId = decodedToken.uid;
-      userEmail = decodedToken.email || '';
-      userName = decodedToken.name;
+      // In development, if Firebase Admin fails, use mock data
+      if (process.env.NODE_ENV === 'development' && !process.env.FIREBASE_PRIVATE_KEY?.includes('-----BEGIN PRIVATE KEY-----')) {
+        console.warn('Using development mock user for testing');
+        userId = 'dev-user-' + Date.now();
+        userEmail = 'test@example.com';
+        userName = 'Test User';
+      } else {
+        const decodedToken = await getAuth().verifyIdToken(token);
+        userId = decodedToken.uid;
+        userEmail = decodedToken.email || '';
+        userName = decodedToken.name;
+      }
     } catch (tokenError) {
       console.error('Token verification error:', tokenError);
-      return NextResponse.json(
-        { error: 'Invalid authorization token' },
-        { status: 401 }
-      );
+      
+      // In development, fallback to mock user instead of failing
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Firebase token verification failed in development, using mock user');
+        userId = 'dev-user-' + Date.now();
+        userEmail = 'test@example.com';
+        userName = 'Test User';
+      } else {
+        return NextResponse.json(
+          { error: 'Invalid authorization token' },
+          { status: 401 }
+        );
+      }
     }
 
     // Parse request body
@@ -57,6 +74,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if customer already exists in Stripe
+    const stripe = getStripeServer();
     let customer;
     const existingCustomers = await stripe.customers.list({
       email: userEmail,
