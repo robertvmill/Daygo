@@ -44,6 +44,14 @@ export const addJournalEntry = async (journalData: JournalEntryInput) => {
   console.log("Adding journal entry:", journalData);
   
   try {
+    // First, check if user can create more journal entries (subscription limit check)
+    const { canCreateJournalEntry, trackJournalEntryCreated } = await import('@/services/subscriptionService');
+    const limitCheck = await canCreateJournalEntry();
+    
+    if (!limitCheck.canCreate) {
+      throw new Error(limitCheck.message || 'Cannot create journal entry: limit reached');
+    }
+    
     const user = getCurrentUser();
     console.log("Current user:", user.uid);
     
@@ -69,6 +77,9 @@ export const addJournalEntry = async (journalData: JournalEntryInput) => {
     
     const docRef = await addDoc(journalCollection(), entryData);
     console.log("Journal entry added with ID:", docRef.id);
+    
+    // Track the journal entry creation for usage limits
+    trackJournalEntryCreated();
     
     // Sync with Pinecone (client-side)
     try {
@@ -338,6 +349,10 @@ export const deleteJournalEntry = async (id: string) => {
   
   // Delete the journal entry
   await deleteDoc(doc(db, "journalEntries", id));
+  
+  // Track the journal entry deletion for usage limits
+  const { trackJournalEntryDeleted } = await import('@/services/subscriptionService');
+  trackJournalEntryDeleted();
   
   // Remove from Pinecone
   try {

@@ -24,6 +24,7 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/co
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AITemplateGenerator } from "@/components/AITemplateGenerator";
+import { UsageLimitBanner } from "./UsageLimitBanner";
 
 export function TemplatesPage() {
   const [templates, setTemplates] = useState<JournalTemplate[]>([]);
@@ -94,6 +95,9 @@ export function TemplatesPage() {
           </Breadcrumb>
         </header>
         <main className="flex flex-1 flex-col gap-4 p-4 md:p-8">
+          {/* Usage limit banner for subscription management */}
+          <UsageLimitBanner type="compact" className="mb-4" />
+          
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold">Journal Templates</h1>
             <div className="flex gap-2">

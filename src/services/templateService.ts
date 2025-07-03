@@ -16,6 +16,14 @@ export async function addTemplate(template: Omit<JournalTemplate, "id" | "create
       throw new Error("User must be logged in to add templates");
     }
 
+    // Check if user can create more templates (subscription limit check)
+    const { canCreateTemplate, trackTemplateCreated } = await import('@/services/subscriptionService');
+    const limitCheck = await canCreateTemplate();
+    
+    if (!limitCheck.canCreate) {
+      throw new Error(limitCheck.message || 'Cannot create template: limit reached');
+    }
+
     const userId = auth.currentUser.uid;
     
     // Log the template data before saving
@@ -66,6 +74,9 @@ export async function addTemplate(template: Omit<JournalTemplate, "id" | "create
       userId,
       createdAt: serverTimestamp()
     });
+    
+    // Track the template creation for usage limits
+    trackTemplateCreated();
     
     return {
       id: docRef.id,
@@ -214,6 +225,10 @@ export async function deleteTemplate(id: string) {
     
     const templateRef = doc(db, COLLECTION_NAME, id);
     await deleteDoc(templateRef);
+    
+    // Track the template deletion for usage limits
+    const { trackTemplateDeleted } = await import('@/services/subscriptionService');
+    trackTemplateDeleted();
     
     return { id };
   } catch (error) {

@@ -4,6 +4,7 @@ import { AppSidebar } from "./AppSidebar"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/components/ui/breadcrumb"
 import { Separator } from "@/components/ui/separator"
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
+import { UsageLimitBanner } from "./UsageLimitBanner"
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { getJournalEntries } from '@/services/journalService'
@@ -197,6 +198,9 @@ export function JournalPage() {
           </Breadcrumb>
         </header>
         <main className="flex flex-1 flex-col gap-4 p-4 md:p-8">
+          {/* Usage limit banner for subscription management */}
+          <UsageLimitBanner type="compact" className="mb-4" />
+          
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold">Journal Entries</h1>
             <Button asChild>
