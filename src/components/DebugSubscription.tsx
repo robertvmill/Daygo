@@ -12,6 +12,7 @@ export function DebugSubscription() {
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [usage, setUsage] = useState<UsageStats | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,6 +21,7 @@ export function DebugSubscription() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setUserId(user.uid);
+        setUserEmail(user.email);
         try {
           const [subData, usageData] = await Promise.all([
             getUserSubscription(),
@@ -32,6 +34,7 @@ export function DebugSubscription() {
         }
       } else {
         setUserId(null);
+        setUserEmail(null);
         setSubscription(null);
         setUsage(null);
       }
@@ -104,19 +107,22 @@ export function DebugSubscription() {
       const auth = getAuth();
       const user = auth.currentUser;
       
-      if (!user) {
-        alert('❌ Please log in to fix your subscription');
+      if (!user || !user.email) {
+        alert('❌ Please log in with an email account to fix your subscription');
         return;
       }
 
-      const token = await user.getIdToken();
+      console.log('Attempting to fix subscription for:', userId, user.email);
       
-      const response = await fetch('/api/fix-subscription', {
+      const response = await fetch('/api/fix-subscription-simple', {
         method: 'POST',
         headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          userId: userId,
+          userEmail: user.email
+        })
       });
       
       const result = await response.json();
@@ -131,7 +137,7 @@ export function DebugSubscription() {
         setUsage(usageData);
         alert('✅ ' + result.message);
       } else {
-        alert('❌ ' + result.error);
+        alert('❌ ' + result.error + (result.suggestion ? '\n\n💡 ' + result.suggestion : ''));
       }
     } catch (err) {
       alert('❌ Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
@@ -153,6 +159,7 @@ export function DebugSubscription() {
           <div>
             <h3 className="font-semibold mb-2">📋 User Info</h3>
             <p><strong>User ID:</strong> <code className="bg-gray-100 px-2 py-1 rounded">{userId}</code></p>
+            <p><strong>Email:</strong> <code className="bg-gray-100 px-2 py-1 rounded">{userEmail || 'Not available'}</code></p>
           </div>
 
           <div>
