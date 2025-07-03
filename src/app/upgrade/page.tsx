@@ -10,6 +10,7 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbL
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { UsageLimitBanner } from "@/components/UsageLimitBanner";
+import { DebugSubscription } from "@/components/DebugSubscription";
 import { PRICING, SUBSCRIPTION_TIERS } from "@/types/subscription";
 import { getUserSubscription, getUserUsage } from "@/services/subscriptionService";
 import type { UserSubscription, UsageStats } from "@/types/subscription";
@@ -325,6 +326,11 @@ export default function UpgradePage() {
                 Back to Settings
               </Link>
             </Button>
+          </div>
+
+          {/* Debug Section - Development Only */}
+          <div className="pt-8 border-t">
+            <DebugSubscription />
           </div>
         </main>
       </SidebarInset>
