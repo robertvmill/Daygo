@@ -97,6 +97,47 @@ export function DebugSubscription() {
     }
   };
 
+  const handleFixSubscription = async () => {
+    if (!userId) return;
+    
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      
+      if (!user) {
+        alert('❌ Please log in to fix your subscription');
+        return;
+      }
+
+      const token = await user.getIdToken();
+      
+      const response = await fetch('/api/fix-subscription', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      const result = await response.json();
+      
+      if (response.ok) {
+        // Reload data
+        const [subData, usageData] = await Promise.all([
+          getUserSubscription(),
+          getUserUsage()
+        ]);
+        setSubscription(subData);
+        setUsage(usageData);
+        alert('✅ ' + result.message);
+      } else {
+        alert('❌ ' + result.error);
+      }
+    } catch (err) {
+      alert('❌ Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
+  };
+
   if (loading) return <div>Loading subscription data...</div>;
   if (error) return <div className="text-red-500">Error: {error}</div>;
   if (!userId) return <div>Please log in to view subscription data</div>;
@@ -143,14 +184,28 @@ export function DebugSubscription() {
             )}
           </div>
 
-          <div className="space-x-2 pt-4 border-t">
-            <h3 className="font-semibold mb-2">🧪 Test Actions (Development Only)</h3>
-            <Button onClick={handleTestUpgrade} disabled={subscription?.tier === 'pro'}>
-              ⬆️ Test Upgrade to Pro
-            </Button>
-            <Button onClick={handleTestDowngrade} variant="outline" disabled={subscription?.tier === 'free'}>
-              ⬇️ Test Downgrade to Free
-            </Button>
+          <div className="space-y-4 pt-4 border-t">
+            <div>
+              <h3 className="font-semibold mb-2">🔧 Production Actions</h3>
+              <Button onClick={handleFixSubscription} className="bg-green-600 hover:bg-green-700">
+                🔄 Fix My Subscription (Syncs with Stripe)
+              </Button>
+              <p className="text-xs text-muted-foreground mt-1">
+                This verifies your actual Stripe purchase and updates Firestore accordingly
+              </p>
+            </div>
+            
+            <div>
+              <h3 className="font-semibold mb-2">🧪 Test Actions (Development Only)</h3>
+              <div className="space-x-2">
+                <Button onClick={handleTestUpgrade} disabled={subscription?.tier === 'pro'}>
+                  ⬆️ Test Upgrade to Pro
+                </Button>
+                <Button onClick={handleTestDowngrade} variant="outline" disabled={subscription?.tier === 'free'}>
+                  ⬇️ Test Downgrade to Free
+                </Button>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
