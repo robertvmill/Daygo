@@ -25,6 +25,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/s
 import { getAuth, User as FirebaseUser } from "firebase/auth";
 import { signOut } from "@/lib/authUtils";
 import { toast } from "sonner";
+import { ModeToggle } from "./ModeToggle";
 
 /**
  * Navbar component - Provides mobile navigation for the application
@@ -84,14 +85,14 @@ export function Navbar() {
     { href: "/home", label: "Home", icon: FileText },
     { href: "/journal", label: "Journal", icon: File },
     { href: "/dayscore", label: "DayScore", icon: BarChart3 },
-    { href: "/templates", label: "Templates", icon: FileText },
+    { href: "/prompts", label: "My Prompts", icon: FileText },
     { href: "/ai-chat", label: "Talk to Daygo AI", icon: Bot },
-    { href: "/community", label: "Community", icon: Users },
+    { href: "/community", label: "Templates", icon: Users },
   ];
 
   const actionItems = [
     { href: "/journal/select-template", label: "New Journal Entry", icon: Plus },
-    { href: "/templates/new", label: "New Template", icon: Plus },
+    { href: "/prompts/new", label: "New Template", icon: Plus },
   ];
 
   const accountItems = [
@@ -231,11 +232,15 @@ export function Navbar() {
                       </p>
                     )}
                   </div>
+                  
+                  {/* Theme toggle button */}
+                  <ModeToggle />
+                  
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={handleSignOut}
-                    className="h-8 w-8"
+                    className="h-8 w-8 ml-auto"
                   >
                     <LogOut className="h-4 w-4" />
                     <span className="sr-only">Log out</span>

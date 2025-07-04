@@ -1,0 +1,32 @@
+<!-- DayGo Logo Favicon - Overlapping Hollow Rectangles -->
+<svg 
+  width="32" 
+  height="32" 
+  viewBox="0 0 32 32" 
+  fill="none" 
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <!-- First rectangle (back layer) -->
+  <rect 
+    x="4" 
+    y="4" 
+    width="20" 
+    height="20" 
+    rx="3" 
+    stroke="#4A4A4A" 
+    stroke-width="2" 
+    fill="none"
+  />
+  
+  <!-- Second rectangle (front layer, offset) -->
+  <rect 
+    x="8" 
+    y="8" 
+    width="20" 
+    height="20" 
+    rx="3" 
+    stroke="#4A4A4A" 
+    stroke-width="2" 
+    fill="none"
+  />
+</svg> 

@@ -17,7 +17,12 @@ import { Navbar } from "@/components/Navbar";
 
 export const metadata: Metadata = {
   title: "Daygo - Your Personal Journal",
-  description: "Track your thoughts, reflections, and growth with Daygo's flexible journal system."
+  description: "Track your thoughts, reflections, and growth with Daygo's flexible journal system.",
+  icons: {
+    icon: '/favicon.svg',
+    shortcut: '/favicon.svg',
+    apple: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({

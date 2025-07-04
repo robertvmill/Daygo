@@ -40,6 +40,7 @@
     "firebase-admin": "^13.4.0",
     "framer-motion": "^12.12.1",
     "geist": "^1.4.2",
+    "google-auth-library": "^10.1.0",
     "lucide-react": "^0.510.0",
     "next": "15.3.2",
     "next-themes": "^0.4.6",

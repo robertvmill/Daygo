@@ -12,7 +12,7 @@ export type JournalEntry = {
 
 export type TemplateField = {
   name: string;
-  type: 'text' | 'textarea' | 'boolean' | 'mantra' | 'table' | 'fillable_table';
+  type: 'text' | 'textarea' | 'boolean' | 'mantra' | 'table' | 'fillable_table' | 'file';
   label: string;
   placeholder?: string;
   required?: boolean;

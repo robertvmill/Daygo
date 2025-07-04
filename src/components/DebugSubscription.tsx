@@ -166,8 +166,8 @@ export function DebugSubscription() {
             <h3 className="font-semibold mb-2">💳 Subscription (from `subscriptions` collection)</h3>
             {subscription ? (
               <div className="space-y-2">
-                <p><strong>Tier:</strong> <Badge variant={subscription.tier === 'pro' ? 'default' : 'secondary'}>{subscription.tier.toUpperCase()}</Badge></p>
-                <p><strong>Status:</strong> <Badge variant="outline">{subscription.status}</Badge></p>
+                <div><strong>Tier:</strong> <Badge variant={subscription.tier === 'pro' ? 'default' : 'secondary'}>{subscription.tier.toUpperCase()}</Badge></div>
+                <div><strong>Status:</strong> <Badge variant="outline">{subscription.status}</Badge></div>
                 <p><strong>Firestore Path:</strong> <code className="bg-gray-100 px-2 py-1 rounded">subscriptions/{userId}</code></p>
                 <p><strong>Created:</strong> {subscription.createdAt.toLocaleDateString()}</p>
                 <p><strong>Updated:</strong> {subscription.updatedAt.toLocaleDateString()}</p>

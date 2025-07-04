@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AppSidebar } from '@/components/AppSidebar';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage } from '@/components/ui/breadcrumb';
@@ -17,8 +17,9 @@ import { getTemplate } from '@/services/templateService';
 import { addJournalEntry, generateContentFromTemplateFields } from '@/services/journalService';
 import { JournalTemplate, TemplateField } from '@/types/journal';
 import Link from 'next/link';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, Camera, Upload, X } from 'lucide-react';
 import { Timestamp } from 'firebase/firestore';
+import { extractTextFromPhoto, validatePhotoFile } from '@/services/photoProcessingService';
 
 type TableFormData = {
   cells: string[][];
@@ -30,13 +31,22 @@ type TableFormData = {
 type JournalFormData = {
   title: string;
   [key: string]: string | boolean | TableFormData | undefined;
-};
+}; // This defines the end of the JournalFormData type interface
+   // JournalFormData is used to store form data for journal entries with:
+   // - title: A required string field for the journal entry title
+   // - Dynamic key-value pairs where values can be:
+   //   * string: For text input fields
+   //   * boolean: For checkbox fields
+   //   * TableFormData: For table input data
+   //   * undefined: For optional fields
 
 export default function NewJournalEntryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const templateId = searchParams.get('templateId');
   const communityTemplateParam = searchParams.get('communityTemplate');
+  const journalType = searchParams.get('type');
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [template, setTemplate] = useState<JournalTemplate | null>(null);
@@ -44,15 +54,55 @@ export default function NewJournalEntryPage() {
   const [formData, setFormData] = useState<JournalFormData>({
     title: '',
   });
+  
+  // Photo journal specific states
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [extractedText, setExtractedText] = useState<string>('');
+  const [isExtractingText, setIsExtractingText] = useState(false);
+  const [textExtractionComplete, setTextExtractionComplete] = useState(false);
+  
+  // Drag and drop states
+  const [isDragActive, setIsDragActive] = useState(false);
+  const [isDragAccept, setIsDragAccept] = useState(false);
+  const [isDragReject, setIsDragReject] = useState(false);
 
-  // Load template data (either from user templates or community template)
+  // Load template data (either from user templates, community template, or photo journal)
   useEffect(() => {
     const loadTemplate = async () => {
       try {
         setLoading(true);
 
+        // Check if this is a photo journal
+        if (journalType === 'photo') {
+          const serverTimestamp = Timestamp.now();
+          setTemplate({
+            id: 'photo-journal',
+            name: 'Photo Journal',
+            description: 'Upload a photo of your handwritten journal with optional caption',
+            fields: [
+              {
+                name: 'photo',
+                type: 'file',
+                label: 'Journal Photo',
+                placeholder: 'Upload or capture a photo of your journal',
+                required: true,
+              },
+              {
+                name: 'caption',
+                type: 'textarea',
+                label: 'Caption (Optional)',
+                placeholder: 'Add any thoughts or context about this journal entry...',
+                required: false,
+              },
+            ],
+            userId: 'system',
+            createdAt: serverTimestamp
+          });
+          setFormData(prev => ({ ...prev, title: `Photo Journal - ${new Date().toLocaleDateString()}` }));
+        }
         // Check if using a community template
-        if (communityTemplateParam) {
+        else if (communityTemplateParam) {
           try {
             const parsedTemplate = JSON.parse(communityTemplateParam);
             
@@ -104,14 +154,21 @@ export default function NewJournalEntryPage() {
           setTemplate({
             id: 'basic',
             name: 'Quick Note (Simple)',
-            description: 'A simple journal entry with just title and content',
+            description: 'Write your thoughts or upload a photo of your handwritten journal',
             fields: [
               {
                 name: 'content',
                 type: 'textarea',
                 label: 'Journal Content',
                 placeholder: 'Write your thoughts here...',
-                required: true,
+                required: false,
+              },
+              {
+                name: 'photo',
+                type: 'file',
+                label: 'Upload Photo (Optional)',
+                placeholder: 'Upload a photo of your handwritten journal for automatic text extraction',
+                required: false,
               },
             ],
             userId: 'system',
@@ -127,7 +184,154 @@ export default function NewJournalEntryPage() {
     };
 
     loadTemplate();
-  }, [templateId, communityTemplateParam, router]);
+  }, [templateId, communityTemplateParam, journalType, router]);
+
+  // Handle file selection for photo upload
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      // Validate file using the photo processing service
+      const validation = validatePhotoFile(file);
+      if (!validation.isValid) {
+        toast.error(validation.error || 'Invalid file');
+        return;
+      }
+
+      setSelectedImage(file);
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Handle camera capture (opens camera on mobile)
+  const handleCameraCapture = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.setAttribute('capture', 'environment');
+      fileInputRef.current.click();
+    }
+  };
+
+  // Handle file upload button
+  const handleFileUpload = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.removeAttribute('capture');
+      fileInputRef.current.click();
+    }
+  };
+
+  // Remove selected image
+  const handleRemoveImage = () => {
+    setSelectedImage(null);
+    setImagePreview(null);
+    setExtractedText('');
+    setTextExtractionComplete(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // Extract text from selected image
+  const handleExtractText = async () => {
+    if (!selectedImage) {
+      toast.error('Please select an image first');
+      return;
+    }
+
+    setIsExtractingText(true);
+    
+    try {
+      toast.info('Extracting text from image...', { duration: 3000 });
+      
+      const result = await extractTextFromPhoto(selectedImage);
+      
+      setExtractedText(result.text);
+      setTextExtractionComplete(true);
+      
+      const confidencePercent = (result.confidence * 100).toFixed(1);
+      toast.success(`Text extracted successfully! (${confidencePercent}% confidence)`);
+      
+    } catch (error) {
+      console.error('Text extraction failed:', error);
+      toast.error('Failed to extract text. Please try again.');
+    } finally {
+      setIsExtractingText(false);
+    }
+  };
+
+  // Drag and drop handlers
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(true);
+    
+    // Check if the dragged item contains files
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      const item = e.dataTransfer.items[0];
+      if (item.type.startsWith('image/')) {
+        setIsDragAccept(true);
+        setIsDragReject(false);
+      } else {
+        setIsDragAccept(false);
+        setIsDragReject(true);
+      }
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Only remove drag state if we're leaving the drop zone entirely
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    
+    if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) {
+      setIsDragActive(false);
+      setIsDragAccept(false);
+      setIsDragReject(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    setIsDragActive(false);
+    setIsDragAccept(false);
+    setIsDragReject(false);
+    
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      const file = files[0];
+      
+      // Validate file using the photo processing service
+      const validation = validatePhotoFile(file);
+      if (!validation.isValid) {
+        toast.error(validation.error || 'Invalid file');
+        return;
+      }
+
+      setSelectedImage(file);
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleInputChange = (fieldName: string, value: string | boolean) => {
     setFormData(prev => ({
@@ -145,11 +349,34 @@ export default function NewJournalEntryPage() {
       return;
     }
 
+    // Special validation for photo journal
+    if (template.id === 'photo-journal') {
+      if (!selectedImage) {
+        toast.error('Please select a photo for your journal entry');
+        return;
+      }
+    }
+
     // Validate required fields
     const requiredFields = template.fields.filter(field => field.required);
     for (const field of requiredFields) {
-      if (!formData[field.name]) {
+      if (field.type === 'file' && !selectedImage) {
+        toast.error(`Please upload a photo for: ${field.label}`);
+        return;
+      }
+      if (field.type !== 'file' && !formData[field.name]) {
         toast.error(`Please fill in the required field: ${field.label}`);
+        return;
+      }
+    }
+
+    // Special validation for Quick Note - user must provide either photo OR text content
+    if (template.id === 'basic' && template.name === 'Quick Note (Simple)') {
+      const hasPhoto = selectedImage;
+      const hasTextContent = formData['content'] && (formData['content'] as string).trim();
+      
+      if (!hasPhoto && !hasTextContent) {
+        toast.error('Please either write content or upload a photo for your journal entry');
         return;
       }
     }
@@ -160,23 +387,80 @@ export default function NewJournalEntryPage() {
       // Prepare the data
       const templateFields: Record<string, string | undefined> = {};
       
-      Object.entries(formData).forEach(([key, value]) => {
-        if (key === 'title') return; // Skip title
-        // Serialize table/filled table cells as JSON string
-        if (typeof value === 'object' && value && 'cells' in value) {
-          templateFields[key] = JSON.stringify((value as { cells: string[][] }).cells);
-        } else if (typeof value === 'boolean') {
-          templateFields[key] = value ? 'true' : 'false';
-        } else if (typeof value === 'string') {
-          templateFields[key] = value;
+      // Handle photo journal with pre-extracted text
+      if (template.id === 'photo-journal' && selectedImage) {
+        if (!textExtractionComplete || !extractedText) {
+          toast.error('Please extract text from the image first using the "Extract Text" button');
+          setIsSubmitting(false);
+          return;
         }
-      });
+        
+        // Use the pre-extracted and potentially edited text
+        templateFields['extractedText'] = extractedText;
+        templateFields['caption'] = (formData['caption'] as string) || '';
+      } 
+      // Handle Quick Note with photo, combine extracted text with any typed content
+      else if (template.id === 'basic' && selectedImage) {
+        if (!textExtractionComplete || !extractedText) {
+          toast.error('Please extract text from the image first using the "Extract Text" button');
+          setIsSubmitting(false);
+          return;
+        }
+        
+        // Use the pre-extracted and potentially edited text
+        templateFields['extractedText'] = extractedText;
+        templateFields['content'] = (formData['content'] as string) || '';
+      } else {
+        // Handle regular template fields
+        Object.entries(formData).forEach(([key, value]) => {
+          if (key === 'title') return; // Skip title
+          // Serialize table/filled table cells as JSON string
+          if (typeof value === 'object' && value && 'cells' in value) {
+            templateFields[key] = JSON.stringify((value as { cells: string[][] }).cells);
+          } else if (typeof value === 'boolean') {
+            templateFields[key] = value ? 'true' : 'false';
+          } else if (typeof value === 'string') {
+            templateFields[key] = value;
+          }
+        });
+      }
       
       // Generate content from template fields
       let content = '';
       
+      // For Photo Journal, create content from extracted text
+      if (template.id === 'photo-journal') {
+        content = templateFields['extractedText'] || '';
+        if (templateFields['caption']) {
+          content += `\n\n--- Caption ---\n${templateFields['caption']}`;
+        }
+        if (templateFields['confidence']) {
+          const confidence = parseFloat(templateFields['confidence']) * 100;
+          content += `\n\n--- Processing Info ---\nOCR Confidence: ${confidence.toFixed(1)}%`;
+        }
+      }
+      // For Quick Note with photo, combine extracted text with any typed content
+      else if (template.id === 'basic' && templateFields['extractedText']) {
+        const extractedText = templateFields['extractedText'] || '';
+        const typedContent = templateFields['content'] || '';
+        
+        // Combine both sources of content
+        if (extractedText && typedContent) {
+          content = `${extractedText}\n\n--- Additional Notes ---\n${typedContent}`;
+        } else if (extractedText) {
+          content = extractedText;
+        } else {
+          content = typedContent;
+        }
+        
+        // Add confidence info if available
+        if (templateFields['confidence']) {
+          const confidence = parseFloat(templateFields['confidence']) * 100;
+          content += `\n\n--- OCR Info ---\nText extracted from photo (${confidence.toFixed(1)}% confidence)`;
+        }
+      }
       // For Quick Note (Simple), ensure we use the content directly
-      if (template.id === 'basic' && template.name === 'Quick Note (Simple)') {
+      else if (template.id === 'basic' && template.name === 'Quick Note (Simple)') {
         content = templateFields['content'] || '';
         
         // Log detailed info about the quick note for debugging
@@ -217,7 +501,7 @@ export default function NewJournalEntryPage() {
         }
       }
       
-      // Only add templateId for non-basic templates
+      // Only add templateId for non-basic templates (but include photo-journal)
       if (template.id !== 'basic') {
         submissionData.templateId = template.id;
       }
@@ -245,6 +529,187 @@ export default function NewJournalEntryPage() {
   // Render a field based on its type
   const renderField = (field: TemplateField) => {
     switch (field.type) {
+      case 'file':
+        return (
+          <div key={field.name} className="space-y-4">
+            <Label htmlFor={field.name}>{field.label} {field.required && <span className="text-destructive">*</span>}</Label>
+            
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            
+            {/* Image preview and text extraction */}
+            {imagePreview ? (
+              <div className="space-y-4">
+                <div className="relative">
+                  <img 
+                    src={imagePreview} 
+                    alt="Journal preview" 
+                    className="w-full max-w-md rounded-lg border shadow-sm"
+                  />
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    className="absolute top-2 right-2"
+                    onClick={handleRemoveImage}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                
+                {/* Extract Text Button */}
+                {!textExtractionComplete ? (
+                  <Button
+                    type="button"
+                    onClick={handleExtractText}
+                    disabled={isExtractingText}
+                    className="w-full"
+                  >
+                    {isExtractingText ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Extracting Text...
+                      </>
+                    ) : (
+                      'Extract Text from Image'
+                    )}
+                  </Button>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="extracted-text">Extracted Text (Editable)</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setTextExtractionComplete(false);
+                          setExtractedText('');
+                        }}
+                      >
+                        Extract Again
+                      </Button>
+                    </div>
+                    <Textarea
+                      id="extracted-text"
+                      value={extractedText}
+                      onChange={(e) => setExtractedText(e.target.value)}
+                      placeholder="Edit the extracted text here..."
+                      className="min-h-32"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      ✅ Text extracted successfully! You can edit it above before saving your journal entry.
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Upload buttons with drag and drop */
+              <div className="space-y-3">
+                {/* Drag and Drop Zone */}
+                <div
+                  onDragEnter={handleDragEnter}
+                  onDragLeave={handleDragLeave}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop}
+                  className={`
+                    border-2 border-dashed rounded-lg p-6 transition-all duration-200 cursor-pointer
+                    ${isDragActive 
+                      ? isDragAccept 
+                        ? 'border-green-400 bg-green-50 dark:bg-green-950/20' 
+                        : isDragReject 
+                          ? 'border-red-400 bg-red-50 dark:bg-red-950/20'
+                          : 'border-blue-400 bg-blue-50 dark:bg-blue-950/20'
+                      : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+                    }
+                  `}
+                  onClick={handleFileUpload}
+                >
+                  <div className="text-center">
+                    <Upload className={`mx-auto h-12 w-12 mb-4 ${
+                      isDragActive 
+                        ? isDragAccept 
+                          ? 'text-green-500' 
+                          : isDragReject 
+                            ? 'text-red-500'
+                            : 'text-blue-500'
+                        : 'text-gray-400'
+                    }`} />
+                    <div className="space-y-2">
+                      {isDragActive ? (
+                        isDragAccept ? (
+                          <p className="text-green-600 dark:text-green-400 font-medium">
+                            Drop your image here
+                          </p>
+                        ) : isDragReject ? (
+                          <p className="text-red-600 dark:text-red-400 font-medium">
+                            Only image files are allowed
+                          </p>
+                        ) : (
+                          <p className="text-blue-600 dark:text-blue-400 font-medium">
+                            Drop files here
+                          </p>
+                        )
+                      ) : (
+                        <>
+                          <p className="text-lg font-medium text-foreground">
+                            Drag & drop an image here
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            or click to browse files
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Alternative buttons */}
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">
+                      Or use these options
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCameraCapture}
+                    className="h-16 flex flex-col gap-2"
+                  >
+                    <Camera className="h-5 w-5" />
+                    <span>Take Photo</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleFileUpload}
+                    className="h-16 flex flex-col gap-2"
+                  >
+                    <Upload className="h-5 w-5" />
+                    <span>Browse Files</span>
+                  </Button>
+                </div>
+                
+                <p className="text-sm text-muted-foreground text-center">
+                  {field.placeholder}
+                </p>
+              </div>
+            )}
+          </div>
+        );
+      
       case 'text':
         return (
           <div key={field.name} className="space-y-2">
@@ -252,7 +717,7 @@ export default function NewJournalEntryPage() {
             <Input
               id={field.name}
               placeholder={field.placeholder}
-              value={typeof formData[field.name] === 'string' ? formData[field.name] : ''}
+              value={typeof formData[field.name] === 'string' ? formData[field.name] as string : ''}
               onChange={(e) => handleInputChange(field.name, e.target.value)}
             />
           </div>
@@ -264,7 +729,7 @@ export default function NewJournalEntryPage() {
             <Textarea
               id={field.name}
               placeholder={field.placeholder}
-              value={typeof formData[field.name] === 'string' ? formData[field.name] : ''}
+              value={typeof formData[field.name] === 'string' ? formData[field.name] as string : ''}
               onChange={(e) => handleInputChange(field.name, e.target.value)}
               className="min-h-32"
             />
@@ -353,7 +818,7 @@ export default function NewJournalEntryPage() {
                     </tr>
                   </thead>
                   <tbody className="[&_tr:last-child]:border-0">
-                    {((formData[field.name] && typeof formData[field.name] === 'object' && (formData[field.name] as TableFormData).cells) || (field.tableData && field.tableData.cells) || (field.tableData && Array(field.tableData.rows).fill(null).map(() => Array(field.tableData.columns).fill('')))).map((row: string[], rowIndex: number) => (
+                    {((formData[field.name] && typeof formData[field.name] === 'object' && (formData[field.name] as TableFormData).cells) || (field.tableData && field.tableData.cells) || (field.tableData && Array(field.tableData.rows).fill(null).map(() => Array(field.tableData.columns || 0).fill('')))).map((row: string[], rowIndex: number) => (
                       <tr key={`${field.name}-row-${rowIndex}`} className="border-b transition-colors hover:bg-muted/50">
                         {row.map((cell: string, cellIndex: number) => (
                           <td key={`${field.name}-cell-${rowIndex}-${cellIndex}`} className="p-2 align-middle">
@@ -363,16 +828,16 @@ export default function NewJournalEntryPage() {
                                 if (!field.tableData) return;
                                 const newTable = (formData[field.name] && typeof formData[field.name] === 'object' && (formData[field.name] as TableFormData).cells)
                                   ? (formData[field.name] as TableFormData).cells.map((r: string[], i: number) => i === rowIndex ? r.map((c, j) => j === cellIndex ? e.target.value : c) : r)
-                                  : (field.tableData.cells ? field.tableData.cells.map(r => [...r]) : Array(field.tableData.rows).fill(null).map(() => Array(field.tableData.columns).fill('')));
+                                  : (field.tableData.cells ? field.tableData.cells.map(r => [...r]) : Array(field.tableData.rows || 0).fill(null).map(() => Array(field.tableData?.columns || 0).fill('')));
                                 newTable[rowIndex][cellIndex] = e.target.value;
                                 setFormData((prev) => ({
                                   ...prev,
                                   [field.name]: {
                                     ...(prev[field.name] as TableFormData),
                                     cells: newTable,
-                                    headers: field.tableData.headers,
+                                    headers: field.tableData?.headers || [],
                                     rows: newTable.length,
-                                    columns: field.tableData.columns
+                                    columns: field.tableData?.columns || 0
                                   }
                                 }));
                               }}
@@ -392,17 +857,17 @@ export default function NewJournalEntryPage() {
                     variant="outline"
                     onClick={() => {
                       if (!field.tableData) return;
-                      const current = (formData[field.name] && typeof formData[field.name] === 'object' && (formData[field.name] as TableFormData).cells) || field.tableData.cells || Array(field.tableData.rows).fill(null).map(() => Array(field.tableData.columns).fill(''));
-                      const newRow = Array(field.tableData.columns).fill('');
+                      const current = (formData[field.name] && typeof formData[field.name] === 'object' && (formData[field.name] as TableFormData).cells) || field.tableData.cells || Array(field.tableData.rows || 0).fill(null).map(() => Array(field.tableData?.columns || 0).fill(''));
+                      const newRow = Array(field.tableData.columns || 0).fill('');
                       const newTable = [...current, newRow];
                       setFormData((prev) => ({
                         ...prev,
                         [field.name]: {
                           ...(prev[field.name] as TableFormData),
                           cells: newTable,
-                          headers: field.tableData.headers,
+                          headers: field.tableData?.headers || [],
                           rows: newTable.length,
-                          columns: field.tableData.columns
+                          columns: field.tableData?.columns || 0
                         }
                       }));
                     }}

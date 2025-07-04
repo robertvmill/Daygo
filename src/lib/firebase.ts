@@ -2,6 +2,7 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
 import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
+import { getStorage } from "firebase/storage";
 // Import analytics only on client side
 import { getAnalytics } from "firebase/analytics";
 
@@ -24,6 +25,9 @@ export const db = getFirestore(app);
 
 // Initialize Auth with local persistence
 export const auth = getAuth(app);
+
+// Initialize Storage
+export const storage = getStorage(app);
 
 // Set up persistence for faster auth checks
 if (typeof window !== 'undefined') {

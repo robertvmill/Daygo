@@ -20,6 +20,7 @@ import { signOut } from "@/lib/authUtils"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { SearchForm } from "./SearchForm"
+import { ModeToggle } from "./ModeToggle"
 
 export function AppSidebar() {
   const pathname = usePathname()
@@ -108,19 +109,23 @@ export function AppSidebar() {
           </SidebarMenuItem>
           
           <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={pathname.startsWith("/templates")}>
-              <Link href="/templates">
-                <FileText className="mr-2 h-4 w-4" />
-                <span>Templates</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          
-          <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith("/ai-chat")}>
               <Link href="/ai-chat">
                 <Bot className="mr-2 h-4 w-4" />
                 <span>Talk to Daygo AI</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+        
+        <SidebarMenu className="mt-6">
+          <h3 className="px-4 py-2 text-sm font-medium">Templates</h3>
+          
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith("/prompts")}>
+              <Link href="/prompts">
+                <FileText className="mr-2 h-4 w-4" />
+                <span>My Prompts</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -129,7 +134,7 @@ export function AppSidebar() {
             <SidebarMenuButton asChild isActive={pathname.startsWith("/community")}>
               <Link href="/community">
                 <Users className="mr-2 h-4 w-4" />
-                <span>Community</span>
+                <span>Templates</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -149,7 +154,7 @@ export function AppSidebar() {
           
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
-              <Link href="/templates/new">
+              <Link href="/prompts/new">
                 <Plus className="mr-2 h-4 w-4" />
                 <span>New Template</span>
               </Link>
@@ -215,7 +220,11 @@ export function AppSidebar() {
               )}
             </div>
             
-            <SidebarMenuItem className="ml-auto">
+            <div className="ml-auto">
+              <ModeToggle />
+            </div>
+            
+            <SidebarMenuItem>
               <SidebarMenuButton onClick={handleSignOut}>
                 <LogOut className="h-4 w-4" />
                 <span className="sr-only">Log out</span>

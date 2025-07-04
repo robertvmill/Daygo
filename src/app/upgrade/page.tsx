@@ -18,12 +18,14 @@ import type { UserSubscription, UsageStats } from "@/types/subscription";
 import { getAuth } from "firebase/auth";
 import { toast } from "sonner";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 // Upgrade page component inspired by Notion's pricing page
 export default function UpgradePage() {
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [usage, setUsage] = useState<UsageStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     const loadData = async () => {
@@ -43,6 +45,43 @@ export default function UpgradePage() {
 
     loadData();
   }, []);
+
+  // Handle return from Stripe checkout
+  useEffect(() => {
+    const success = searchParams.get('success');
+    const canceled = searchParams.get('canceled');
+    const sessionId = searchParams.get('session_id');
+
+    if (success === 'true') {
+      toast.success('🎉 Welcome to Pro! Your subscription has been activated.');
+      
+      // Refresh subscription data after successful checkout
+      const refreshData = async () => {
+        try {
+          // Add a small delay to ensure webhook has processed
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          const [subscriptionData, usageData] = await Promise.all([
+            getUserSubscription(),
+            getUserUsage()
+          ]);
+          setSubscription(subscriptionData);
+          setUsage(usageData);
+        } catch (error) {
+          console.error('Error refreshing subscription data:', error);
+        }
+      };
+      
+      refreshData();
+    } else if (canceled === 'true') {
+      toast.info('Checkout was canceled. You can upgrade anytime!');
+    }
+
+    // Clean up URL parameters after handling
+    if (success || canceled) {
+      window.history.replaceState({}, '', '/upgrade');
+    }
+  }, [searchParams]);
 
   const handleUpgradeToPro = async () => {
     try {
@@ -99,6 +138,24 @@ export default function UpgradePage() {
 
   const handleUpgradeToTeam = () => {
     toast.info('Team plan coming soon! Contact support for early access.');
+  };
+
+  const handleRefreshSubscription = async () => {
+    setLoading(true);
+    try {
+      const [subscriptionData, usageData] = await Promise.all([
+        getUserSubscription(),
+        getUserUsage()
+      ]);
+      setSubscription(subscriptionData);
+      setUsage(usageData);
+      toast.success('Subscription status refreshed!');
+    } catch (error) {
+      console.error('Error refreshing subscription data:', error);
+      toast.error('Failed to refresh subscription status');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) {
@@ -320,12 +377,17 @@ export default function UpgradePage() {
               You can upgrade or downgrade your plan at any time. 
               Your data is always safe and accessible across all plans.
             </p>
-            <Button variant="outline" asChild>
-              <Link href="/settings">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Settings
-              </Link>
-            </Button>
+            <div className="flex gap-2 justify-center">
+              <Button variant="outline" asChild>
+                <Link href="/settings">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Settings
+                </Link>
+              </Button>
+              <Button variant="outline" onClick={handleRefreshSubscription} disabled={loading}>
+                Refresh Status
+              </Button>
+            </div>
           </div>
 
           {/* Debug Section - Development Only */}

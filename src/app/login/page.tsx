@@ -104,85 +104,10 @@ export default function LoginPage() {
         </div>
       </nav>
 
-      <div className="flex flex-1 flex-col md:flex-row">
-        {/* Left side - App information */}
-        {/* Designer: Marketing content with animated features list */}
-        <div className="w-full md:w-1/2 bg-muted py-24 px-6 md:px-12 flex items-center justify-center">
-          <div className="max-w-xl mx-auto">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8 }}
-            >
-              <div className="inline-flex items-center bg-background rounded-full px-4 py-1 mb-6 self-start">
-                <Sparkles className="w-4 h-4 text-primary mr-2" />
-                <span className="text-sm font-medium">Journaling reimagined</span>
-              </div>
-
-              <h1 className="text-3xl md:text-4xl font-bold mb-6 leading-tight">
-                Design your days with
-                <span className="relative ml-2">
-                  intention
-                  <motion.div
-                    className="absolute -bottom-2 left-0 h-3 w-full bg-primary/20 -z-10"
-                    initial={{ width: 0 }}
-                    animate={{ width: "100%" }}
-                    transition={{ duration: 0.8, delay: 0.5 }}
-                  />
-                </span>
-              </h1>
-
-              <p className="text-lg text-muted-foreground mb-8">
-                DayGo helps you create structured journal templates and daily rituals 
-                that lead to deeper self-awareness and enhanced productivity.
-              </p>
-
-              <div className="space-y-6 mt-8">
-                {[
-                  {
-                    icon: <Calendar className="h-5 w-5" />,
-                    title: "Custom templates",
-                    description: "Create personalized journal templates that fit your unique needs and goals"
-                  },
-                  {
-                    icon: <CheckCircle className="h-5 w-5" />,
-                    title: "Track your progress",
-                    description: "Monitor your growth and celebrate small wins with built-in tracking tools"
-                  },
-                  {
-                    icon: <Clock className="h-5 w-5" />,
-                    title: "Daily rituals",
-                    description: "Build consistent habits and routines that transform your productivity"
-                  }
-                ].map((feature, i) => (
-                  <motion.div 
-                    key={i}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.3 + (i * 0.2) }}
-                    className="flex items-start gap-4"
-                  >
-                    <div className="flex-shrink-0 mt-1 bg-secondary p-2 rounded-full text-secondary-foreground">
-                      {feature.icon}
-                    </div>
-                    <div>
-                      <h3 className="font-medium">{feature.title}</h3>
-                      <p className="text-muted-foreground">{feature.description}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-
-              <div className="mt-12 pt-6 border-t border-border">
-                <p className="text-sm text-muted-foreground mb-4">Start your journaling journey today</p>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-
-        {/* Right side - Login form */}
+      <div className="flex flex-1 flex-col">
+        {/* Main content - Login form first */}
         {/* Designer: Clean login form with email/password and Google sign in options */}
-        <div className="w-full md:w-1/2 pt-24 pb-16 px-6 md:px-12 flex items-center justify-center">
+        <div className="w-full pt-24 pb-16 px-6 md:px-12 flex items-center justify-center bg-background">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -317,6 +242,79 @@ export default function LoginPage() {
               </Link>
             </p>
           </motion.div>
+        </div>
+
+        {/* Marketing content moved below the form */}
+        {/* Designer: Marketing content with animated features list */}
+        <div className="w-full bg-muted py-16 px-6 md:px-12">
+          <div className="max-w-4xl mx-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.3 }}
+            >
+              <div className="text-center mb-12">
+                <div className="inline-flex items-center bg-background rounded-full px-4 py-1 mb-6">
+                  <Sparkles className="w-4 h-4 text-primary mr-2" />
+                  <span className="text-sm font-medium">Journaling reimagined</span>
+                </div>
+
+                <h2 className="text-3xl md:text-4xl font-bold mb-6 leading-tight">
+                  Design your days with
+                  <span className="relative ml-2">
+                    intention
+                    <motion.div
+                      className="absolute -bottom-2 left-0 h-3 w-full bg-primary/20 -z-10"
+                      initial={{ width: 0 }}
+                      animate={{ width: "100%" }}
+                      transition={{ duration: 0.8, delay: 0.8 }}
+                    />
+                  </span>
+                </h2>
+
+                <p className="text-lg text-muted-foreground mb-12 max-w-2xl mx-auto">
+                  DayGo helps you create structured journal templates and daily rituals 
+                  that lead to deeper self-awareness and enhanced productivity.
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-8">
+                {[
+                  {
+                    icon: <Calendar className="h-6 w-6" />,
+                    title: "Custom templates",
+                    description: "Create personalized journal templates that fit your unique needs and goals"
+                  },
+                  {
+                    icon: <CheckCircle className="h-6 w-6" />,
+                    title: "Track your progress",
+                    description: "Monitor your growth and celebrate small wins with built-in tracking tools"
+                  },
+                  {
+                    icon: <Clock className="h-6 w-6" />,
+                    title: "Daily rituals",
+                    description: "Build consistent habits and routines that transform your productivity"
+                  }
+                ].map((feature, i) => (
+                  <motion.div 
+                    key={i}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.5 + (i * 0.2) }}
+                    className="text-center"
+                  >
+                    <div className="flex justify-center mb-4">
+                      <div className="bg-background p-3 rounded-full text-primary">
+                        {feature.icon}
+                      </div>
+                    </div>
+                    <h3 className="font-semibold mb-2">{feature.title}</h3>
+                    <p className="text-muted-foreground text-sm">{feature.description}</p>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
         </div>
       </div>
     </div>
