@@ -1,19 +1,22 @@
 'use client';
 
 // Import necessary dependencies for React and UI components
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { BotIcon, SendIcon, ThermometerIcon, ArrowRightLeft } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { BotIcon, SendIcon, ThermometerIcon, ArrowRightLeft, MicIcon, MicOffIcon } from "lucide-react";
 import { useChat } from '@ai-sdk/react';
 import { Message } from 'ai';
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { getAuth } from "firebase/auth";
 import { toast } from "sonner";
+// Import markdown renderer
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 // Type definitions for message parts and tool results
 interface ToolInvocation {
@@ -67,6 +70,132 @@ interface JournalSearchResult {
 
 type MessagePart = TextPart | ToolInvocationPart | ToolResultPart;
 
+// Beautiful animated loading component for journal search
+const JournalSearchAnimation = () => {
+  return (
+    <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+      <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
+        <BotIcon className="h-3 w-3 text-white" />
+      </div>
+      <div className="flex-1">
+        <div className="text-sm font-medium text-blue-700 dark:text-blue-300 mb-2">
+          Searching through your journal entries...
+        </div>
+        {/* Simple loading bar */}
+        <div className="w-full bg-blue-200 dark:bg-blue-800 rounded-full h-2 overflow-hidden">
+          <div className="h-full bg-blue-500 rounded-full animate-[progress_2s_ease-in-out_infinite]"></div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Speech recognition hook using OpenAI Whisper API
+const useSpeechRecognition = () => {
+  const [isListening, setIsListening] = useState(false);
+  const [transcript, setTranscript] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  const startListening = useCallback(async () => {
+    try {
+      // Check if browser supports MediaRecorder
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast.error('Audio recording is not supported in this browser');
+        return;
+      }
+
+      // Request microphone permission
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      // Create MediaRecorder
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        // Stop the microphone stream
+        stream.getTracks().forEach(track => track.stop());
+        
+        // Create audio blob from chunks
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+        
+        // Send to our API for transcription
+        await transcribeAudio(audioBlob);
+      };
+
+      mediaRecorder.start();
+      setIsListening(true);
+      setError(null);
+      toast.success('Recording started - speak now!');
+    } catch (err) {
+      console.error('Error starting recording:', err);
+      setError('Failed to start recording');
+      toast.error('Failed to start recording. Please check microphone permissions.');
+    }
+  }, []);
+
+  const stopListening = useCallback(() => {
+    if (mediaRecorderRef.current && isListening) {
+      mediaRecorderRef.current.stop();
+      setIsListening(false);
+    }
+  }, [isListening]);
+
+  const transcribeAudio = async (audioBlob: Blob) => {
+    try {
+      setIsTranscribing(true);
+      
+      // Create FormData to send audio file
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'recording.wav');
+
+      // Send to our API endpoint
+      const response = await fetch('/api/speech-to-text', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to transcribe audio');
+      }
+
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setTranscript(data.text);
+      toast.success('Audio transcribed successfully!');
+    } catch (err) {
+      console.error('Transcription error:', err);
+      setError('Failed to transcribe audio');
+      toast.error('Failed to transcribe audio. Please try again.');
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  return {
+    isListening,
+    transcript,
+    error,
+    isTranscribing,
+    startListening,
+    stopListening,
+    resetTranscript: () => setTranscript('')
+  };
+};
+
 // Helper function to format weather data
 const formatWeatherResult = (result: WeatherResult) => {
   if (!result) return null;
@@ -98,6 +227,9 @@ export default function AiChatPage() {
   // Get current user from Firebase
   const [userId, setUserId] = useState<string | null>(null);
   
+  // Speech recognition hook
+  const { isListening, transcript, startListening, stopListening, resetTranscript, isTranscribing } = useSpeechRecognition();
+  
   // Effect to get the current user's ID
   useEffect(() => {
     const auth = getAuth();
@@ -113,7 +245,7 @@ export default function AiChatPage() {
   }, []);
   
   // Initialize chat functionality with useChat hook
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error, reload } = useChat({
+  const { messages, input, handleInputChange, handleSubmit, isLoading, error, reload, setInput } = useChat({
     // Set initial system message to define AI assistant's role and capabilities
     initialMessages: [
       {
@@ -136,7 +268,7 @@ export default function AiChatPage() {
         entries. If no entries are found, acknowledge this and offer to help them journal about the topic.`
       }
     ],
-    maxSteps: 5, // Enable multi-step tool calls
+    maxSteps: 5,
     body: {
       userId: userId, // Pass the user ID to the API
     },
@@ -148,6 +280,23 @@ export default function AiChatPage() {
       console.log("Chat finished with message:", message);
     }
   });
+  
+  // Effect to update input when speech transcript changes
+  useEffect(() => {
+    if (transcript) {
+      setInput(transcript);
+    }
+  }, [transcript, setInput]);
+  
+  // Handle microphone button click
+  const handleMicrophoneClick = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      resetTranscript();
+      startListening();
+    }
+  };
   
   // Ref for auto-scrolling to bottom of chat
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -195,31 +344,90 @@ export default function AiChatPage() {
     );
   };
 
+  // Helper function to check if a tool invocation has a corresponding result
+  const hasToolResult = (message: Message, toolName: string) => {
+    if (!message.parts || !Array.isArray(message.parts)) return false;
+    return message.parts.some(part => {
+      const resultPart = part as ToolResultPart;
+      return resultPart.type === 'tool-result' && 
+             resultPart.toolResult?.toolName === toolName;
+    });
+  };
+
   // Render different types of message parts (text, tool invocations, tool results)
   const renderMessagePart = (message: Message, part: MessagePart, index: number) => {
     switch (part.type) {
       case 'text':
-        return <div key={`${message.id}-${index}`}>{part.text}</div>;
-      case 'tool-invocation':
+        // Filter out debug text that shouldn't be shown to users
+        if (
+          part.text.includes('"type":"step-start"') || 
+          part.text.trim() === '{"type":"step-start"}' ||
+          part.text.includes('step-start') ||
+          part.text.trim().startsWith('{"type":') ||
+          part.text.trim() === '' ||
+          /^\s*\{"type":\s*"[^"]*"\}\s*$/.test(part.text.trim())
+        ) {
+          return null;
+        }
+        
+        // Render text with proper markdown formatting
         return (
-          <div key={`${message.id}-${index}`} className="bg-muted/30 p-2 rounded-md my-2 text-sm">
-            <div className="font-medium">Using tool: {part.toolInvocation.toolName}</div>
-            <div className="font-mono text-xs overflow-x-auto mt-1">
-              <div>Parameters:</div>
-              <pre>{JSON.stringify(part.toolInvocation.toolParameters, null, 2)}</pre>
+          <div key={`${message.id}-${index}`} className="prose prose-sm max-w-none dark:prose-invert">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                // Customize markdown components for better styling
+                p: ({ children }) => <p className="mb-2 leading-relaxed">{children}</p>,
+                h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
+                h2: ({ children }) => <h2 className="text-base font-semibold mb-2">{children}</h2>,
+                h3: ({ children }) => <h3 className="text-sm font-medium mb-1">{children}</h3>,
+                ul: ({ children }) => <ul className="list-disc ml-4 mb-2">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal ml-4 mb-2">{children}</ol>,
+                li: ({ children }) => <li className="mb-1">{children}</li>,
+                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                em: ({ children }) => <em className="italic">{children}</em>,
+                code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-sm">{children}</code>,
+                blockquote: ({ children }) => <blockquote className="border-l-4 border-primary pl-4 italic">{children}</blockquote>,
+              }}
+            >
+              {part.text}
+            </ReactMarkdown>
+          </div>
+        );
+      case 'tool-invocation':
+        // Only show loading animation if there's no corresponding tool result yet
+        const toolName = part.toolInvocation.toolName;
+        if (hasToolResult(message, toolName)) {
+          return null; // Don't show loading if result already exists
+        }
+        
+        // Show beautiful animated loading state for journal search
+        if (toolName === 'searchJournalEntries') {
+          return (
+            <div key={`${message.id}-${index}`} className="my-3">
+              <JournalSearchAnimation />
+            </div>
+          );
+        }
+        // For other tools, show a simpler loading state
+        return (
+          <div key={`${message.id}-${index}`} className="bg-muted/30 p-3 rounded-md my-2 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-full bg-blue-500 animate-pulse"></div>
+              <span className="font-medium">Using {toolName}...</span>
             </div>
           </div>
         );
       case 'tool-result':
-        const toolName = part.toolResult.toolName;
+        const resultToolName = part.toolResult.toolName;
         try {
           const resultData = JSON.parse(part.toolResult.toolResultJSON);
           
           return (
             <div key={`${message.id}-${index}`} className="bg-muted/20 p-2 rounded-md my-2">
-              {toolName === 'weather' && formatWeatherResult(resultData as WeatherResult)}
-              {toolName === 'convertFahrenheitToCelsius' && formatTempConversion(resultData as TempConversionResult)}
-              {toolName === 'searchJournalEntries' && formatJournalResults(resultData as JournalSearchResult)}
+              {resultToolName === 'weather' && formatWeatherResult(resultData as WeatherResult)}
+              {resultToolName === 'convertFahrenheitToCelsius' && formatTempConversion(resultData as TempConversionResult)}
+              {resultToolName === 'searchJournalEntries' && formatJournalResults(resultData as JournalSearchResult)}
             </div>
           );
         } catch {
@@ -345,20 +553,63 @@ export default function AiChatPage() {
                     <div ref={messagesEndRef} />
                   </div>
                   
-                  {/* Message input form */}
-                  <form onSubmit={handleSubmit} className="flex gap-2">
-                    <Input
-                      placeholder="Type your message... (e.g., 'What have I written about productivity?')"
+                  {/* Message input form with speech-to-text */}
+                  <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+                    <Textarea
+                      placeholder={
+                        isTranscribing 
+                          ? "Transcribing audio..." 
+                          : isListening 
+                            ? "Recording... Click mic to stop" 
+                            : "Type your message... (e.g., 'What have I written about productivity?')"
+                      }
                       value={input}
                       onChange={handleInputChange}
-                      disabled={isLoading}
-                      className="flex-1"
+                      disabled={isLoading || isTranscribing}
+                      className={`resize-none ${
+                        isListening 
+                          ? 'ring-2 ring-red-500 bg-red-50 dark:bg-red-950/20' 
+                          : isTranscribing 
+                            ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-950/20'
+                            : ''
+                      }`}
+                      rows={3}
                     />
-                    <Button type="submit" disabled={isLoading || !input.trim()}>
-                      <SendIcon className="h-4 w-4 mr-2" />
-                      Send
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button 
+                        type="button" 
+                        variant={isListening ? "destructive" : "outline"}
+                        size="default"
+                        onClick={handleMicrophoneClick}
+                        disabled={isLoading || isTranscribing}
+                        className={`${isListening ? 'animate-pulse' : ''}`}
+                      >
+                        {isTranscribing ? (
+                          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        ) : isListening ? (
+                          <MicOffIcon className="h-4 w-4" />
+                        ) : (
+                          <MicIcon className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <Button type="submit" disabled={isLoading || !input.trim() || isTranscribing} className="flex-1">
+                        <SendIcon className="h-4 w-4 mr-2" />
+                        Send
+                      </Button>
+                    </div>
                   </form>
+                  
+                  {/* Speech recognition status */}
+                  {isListening && (
+                    <div className="text-sm text-center text-red-600 dark:text-red-400">
+                      🎤 Recording... Click the microphone button to stop
+                    </div>
+                  )}
+                  {isTranscribing && (
+                    <div className="text-sm text-center text-blue-600 dark:text-blue-400">
+                      🤖 Transcribing your audio with AI...
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
