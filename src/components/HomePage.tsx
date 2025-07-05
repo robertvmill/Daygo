@@ -171,7 +171,7 @@ export function HomePage() {
   }
 
   const handleCreateTemplate = () => {
-    router.push("/templates/new")
+    router.push("/prompts/new")
   }
 
   const handleAiChat = () => {

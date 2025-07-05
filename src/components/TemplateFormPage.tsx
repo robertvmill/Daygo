@@ -154,7 +154,7 @@ export function TemplateFormPage() {
         .catch(error => {
           console.error('Error loading template:', error);
           toast.error('Failed to load template');
-          router.push('/templates');
+          router.push('/prompts');
         })
         .finally(() => {
           setLoading(false);
@@ -597,7 +597,7 @@ export function TemplateFormPage() {
         toast.success("Template created successfully");
       }
       
-      router.push("/templates");
+      router.push("/prompts");
     } catch (error) {
       console.error("Error saving template:", error);
       toast.error(isEditing ? "Failed to update template" : "Failed to create template");
@@ -652,7 +652,7 @@ export function TemplateFormPage() {
             <BreadcrumbList>
               <BreadcrumbItem>
                 <BreadcrumbLink asChild>
-                  <Link href="/templates">Templates</Link>
+                  <Link href="/prompts">Prompts</Link>
                 </BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbItem>
@@ -664,7 +664,7 @@ export function TemplateFormPage() {
           <div className="ml-auto flex items-center gap-2">
             <Button 
               variant="outline" 
-              onClick={() => router.push('/templates')}
+              onClick={() => router.push('/prompts')}
               disabled={isSubmitting}
             >
               Cancel

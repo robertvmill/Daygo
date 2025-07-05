@@ -137,7 +137,7 @@ export function TemplateForm({ template, isEditing = false }: TemplateFormProps)
         await addTemplate(processedData);
         toast.success("Template created successfully");
       }
-      router.push("/templates");
+      router.push("/prompts");
     } catch (error) {
       console.error("Error saving template:", error);
       toast.error(isEditing ? "Failed to update template" : "Failed to create template");
@@ -361,7 +361,7 @@ export function TemplateForm({ template, isEditing = false }: TemplateFormProps)
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.push("/templates")}
+                          onClick={() => router.push("/prompts")}
             disabled={isSubmitting}
           >
             Cancel

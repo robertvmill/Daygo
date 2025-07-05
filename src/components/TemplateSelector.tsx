@@ -62,7 +62,7 @@ export function TemplateSelector() {
         <h2 className="text-2xl font-bold">Select a Template</h2>
         <div className="flex gap-3">
           <Button asChild variant="outline">
-            <Link href="/templates/new">
+            <Link href="/prompts/new">
               <Plus className="mr-2 h-4 w-4" />
               Create New Template
             </Link>
@@ -81,7 +81,7 @@ export function TemplateSelector() {
               <p className="text-muted-foreground mt-1">Create a template first or use a basic entry</p>
               <div className="flex gap-4 justify-center mt-4">
                 <Button asChild variant="outline">
-                  <Link href="/templates/new">
+                  <Link href="/prompts/new">
                     <Plus className="mr-2 h-4 w-4" />
                     Create Template
                   </Link>
@@ -148,7 +148,7 @@ export function TemplateSelector() {
           <Card 
             className="overflow-hidden flex flex-col border-dashed cursor-pointer hover:border-primary transition-colors"
           >
-            <Link href="/templates/new" className="h-full flex flex-col">
+            <Link href="/prompts/new" className="h-full flex flex-col">
               <CardContent className="flex-1 flex flex-col items-center justify-center py-10">
                 <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
                   <Plus className="h-6 w-6" />

@@ -51,7 +51,7 @@ export function TemplatesPage() {
   }, []);
 
   const handleEditTemplate = (templateId: string) => {
-    router.push(`/templates/edit/${templateId}`);
+    router.push(`/prompts/edit/${templateId}`);
   };
 
   const handleUseTemplate = (templateId: string) => {
@@ -103,7 +103,7 @@ export function TemplatesPage() {
             <div className="flex gap-2">
               <AITemplateGenerator />
               <Button asChild>
-                <Link href="/templates/new">
+                <Link href="/prompts/new">
                   <Plus className="mr-2 h-4 w-4" />
                   New Template
                 </Link>
@@ -122,7 +122,7 @@ export function TemplatesPage() {
               <div className="flex justify-center gap-2 mt-4">
                 <AITemplateGenerator />
                 <Button asChild>
-                  <Link href="/templates/new">
+                  <Link href="/prompts/new">
                     <Plus className="mr-2 h-4 w-4" />
                     Create Template
                   </Link>
