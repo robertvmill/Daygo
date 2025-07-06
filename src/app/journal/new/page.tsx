@@ -15,9 +15,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { getTemplate } from '@/services/templateService';
 import { addJournalEntry, generateContentFromTemplateFields } from '@/services/journalService';
+import { countWords } from '@/services/journalStatsService';
 import { JournalTemplate, TemplateField } from '@/types/journal';
 import Link from 'next/link';
-import { ArrowLeft, Save, Camera, Upload, X } from 'lucide-react';
+import { ArrowLeft, Save, Camera, Upload, X, Mic, Square, Type } from 'lucide-react';
 import { Timestamp } from 'firebase/firestore';
 import { extractTextFromPhoto, validatePhotoFile } from '@/services/photoProcessingService';
 
@@ -66,6 +67,15 @@ export default function NewJournalEntryPage() {
   const [isDragActive, setIsDragActive] = useState(false);
   const [isDragAccept, setIsDragAccept] = useState(false);
   const [isDragReject, setIsDragReject] = useState(false);
+
+  // Speech-to-text states
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [recordingFor, setRecordingFor] = useState<string | null>(null); // Track which field is being recorded for
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   // Load template data (either from user templates, community template, or photo journal)
   useEffect(() => {
@@ -235,31 +245,115 @@ export default function NewJournalEntryPage() {
     }
   };
 
-  // Extract text from selected image
+  // Extract text from uploaded photo
   const handleExtractText = async () => {
-    if (!selectedImage) {
-      toast.error('Please select an image first');
-      return;
-    }
+    if (!selectedImage) return;
 
     setIsExtractingText(true);
-    
     try {
-      toast.info('Extracting text from image...', { duration: 3000 });
-      
-      const result = await extractTextFromPhoto(selectedImage);
-      
-      setExtractedText(result.text);
-      setTextExtractionComplete(true);
-      
-      const confidencePercent = (result.confidence * 100).toFixed(1);
-      toast.success(`Text extracted successfully! (${confidencePercent}% confidence)`);
-      
+      const extractedResult = await extractTextFromPhoto(selectedImage);
+      if (extractedResult.text) {
+        setExtractedText(extractedResult.text);
+        setTextExtractionComplete(true);
+        toast.success('Text extracted successfully!');
+      } else {
+        toast.error('No text could be extracted from the image');
+      }
     } catch (error) {
-      console.error('Text extraction failed:', error);
-      toast.error('Failed to extract text. Please try again.');
+      console.error('Error extracting text:', error);
+      toast.error('Failed to extract text from image');
     } finally {
       setIsExtractingText(false);
+    }
+  };
+
+  // Speech-to-text functions
+  // This function starts recording audio from the user's microphone
+  // It uses the browser's MediaRecorder API to capture audio
+  const startRecording = async (fieldName: string) => {
+    try {
+      // Request microphone permission from the user
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      // Create a MediaRecorder to record the audio stream
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      
+      // Set up event handler for when audio data is available
+      mediaRecorder.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
+      
+      // Set up event handler for when recording stops
+      mediaRecorder.onstop = async () => {
+        // Combine all audio chunks into one blob
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        setAudioBlob(audioBlob);
+        
+        // Send audio to speech-to-text API
+        await transcribeAudio(audioBlob, fieldName);
+        
+        // Clean up - stop all tracks to release microphone
+        stream.getTracks().forEach(track => track.stop());
+      };
+      
+      // Start recording
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingFor(fieldName);
+      toast.success('Recording started! Speak clearly.');
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      toast.error('Could not access microphone. Please check permissions.');
+    }
+  };
+
+  // This function stops the current audio recording
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      setRecordingFor(null);
+      toast.info('Recording stopped. Processing...');
+    }
+  };
+
+  // This function sends the recorded audio to OpenAI's Whisper API for transcription
+  const transcribeAudio = async (audioBlob: Blob, fieldName: string) => {
+    setIsTranscribing(true);
+    try {
+      // Create form data to send audio file to our API
+      const audioFormData = new FormData();
+      audioFormData.append('audio', audioBlob, 'recording.webm');
+      
+      // Send to our speech-to-text API endpoint
+      const response = await fetch('/api/speech-to-text', {
+        method: 'POST',
+        body: audioFormData,
+      });
+      
+      const result = await response.json();
+      
+      if (response.ok && result.text) {
+        // Update the appropriate form field with transcribed text
+        if (fieldName === 'title') {
+          handleInputChange('title', result.text);
+        } else {
+          // For content fields, append or set the transcribed text
+          const currentValue = (typeof formData[fieldName] === 'string' ? formData[fieldName] as string : '') || '';
+          const newValue = currentValue ? `${currentValue} ${result.text}` : result.text;
+          handleInputChange(fieldName, newValue);
+        }
+        toast.success('Speech transcribed successfully!');
+      } else {
+        throw new Error(result.error || 'Transcription failed');
+      }
+    } catch (error) {
+      console.error('Error transcribing audio:', error);
+      toast.error('Failed to transcribe speech. Please try again.');
+    } finally {
+      setIsTranscribing(false);
     }
   };
 
@@ -720,18 +814,95 @@ export default function NewJournalEntryPage() {
         return (
           <div key={field.name} className="space-y-2">
             <Label htmlFor={field.name}>{field.label} {field.required && <span className="text-destructive">*</span>}</Label>
-            <Input
-              id={field.name}
-              placeholder={field.placeholder}
-              value={typeof formData[field.name] === 'string' ? formData[field.name] as string : ''}
-              onChange={(e) => handleInputChange(field.name, e.target.value)}
-            />
+            <div className="relative">
+              <Input
+                id={field.name}
+                placeholder={field.placeholder}
+                value={typeof formData[field.name] === 'string' ? formData[field.name] as string : ''}
+                onChange={(e) => handleInputChange(field.name, e.target.value)}
+                className="pr-12"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={`absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 p-0 ${
+                  isRecording && recordingFor === field.name 
+                    ? 'text-red-500 animate-pulse' 
+                    : isTranscribing 
+                    ? 'text-blue-500' 
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                onClick={() => {
+                  if (isRecording && recordingFor === field.name) {
+                    stopRecording();
+                  } else if (!isRecording && !isTranscribing) {
+                    startRecording(field.name);
+                  }
+                }}
+                disabled={isTranscribing || (isRecording && recordingFor !== field.name)}
+                title={
+                  isRecording && recordingFor === field.name 
+                    ? 'Stop recording' 
+                    : isTranscribing 
+                    ? 'Processing...' 
+                    : 'Record with voice'
+                }
+              >
+                {isRecording && recordingFor === field.name ? (
+                  <Square className="h-4 w-4" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
         );
       case 'textarea':
         return (
           <div key={field.name} className="space-y-2">
-            <Label htmlFor={field.name}>{field.label} {field.required && <span className="text-destructive">*</span>}</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor={field.name}>{field.label} {field.required && <span className="text-destructive">*</span>}</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={`h-8 px-3 gap-2 ${
+                  isRecording && recordingFor === field.name 
+                    ? 'text-red-500 border-red-500 animate-pulse' 
+                    : isTranscribing 
+                    ? 'text-blue-500 border-blue-500' 
+                    : ''
+                }`}
+                onClick={() => {
+                  if (isRecording && recordingFor === field.name) {
+                    stopRecording();
+                  } else if (!isRecording && !isTranscribing) {
+                    startRecording(field.name);
+                  }
+                }}
+                disabled={isTranscribing || (isRecording && recordingFor !== field.name)}
+                title={
+                  isRecording && recordingFor === field.name 
+                    ? 'Stop recording' 
+                    : isTranscribing 
+                    ? 'Processing...' 
+                    : 'Record with voice'
+                }
+              >
+                {isRecording && recordingFor === field.name ? (
+                  <>
+                    <Square className="h-3 w-3" />
+                    Stop
+                  </>
+                ) : (
+                  <>
+                    <Mic className="h-3 w-3" />
+                    {isTranscribing ? 'Processing...' : 'Voice'}
+                  </>
+                )}
+              </Button>
+            </div>
             <Textarea
               id={field.name}
               placeholder={field.placeholder}
@@ -739,6 +910,12 @@ export default function NewJournalEntryPage() {
               onChange={(e) => handleInputChange(field.name, e.target.value)}
               className="min-h-32"
             />
+            <div className="flex justify-end">
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Type className="h-3 w-3" />
+                {countWords(typeof formData[field.name] === 'string' ? formData[field.name] as string : '')} words
+              </span>
+            </div>
           </div>
         );
       case 'boolean':
@@ -966,12 +1143,48 @@ export default function NewJournalEntryPage() {
               <div className="space-y-6">
                 <div className="space-y-2">
                   <Label htmlFor="title">Entry Title <span className="text-destructive">*</span></Label>
-                  <Input
-                    id="title"
-                    placeholder="Enter a title for your journal entry"
-                    value={formData.title || ''}
-                    onChange={(e) => handleInputChange('title', e.target.value)}
-                  />
+                  <div className="relative">
+                    <Input
+                      id="title"
+                      placeholder="Enter a title for your journal entry"
+                      value={formData.title || ''}
+                      onChange={(e) => handleInputChange('title', e.target.value)}
+                      className="pr-12"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className={`absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 p-0 ${
+                        isRecording && recordingFor === 'title' 
+                          ? 'text-red-500 animate-pulse' 
+                          : isTranscribing 
+                          ? 'text-blue-500' 
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                      onClick={() => {
+                        if (isRecording && recordingFor === 'title') {
+                          stopRecording();
+                        } else if (!isRecording && !isTranscribing) {
+                          startRecording('title');
+                        }
+                      }}
+                      disabled={isTranscribing || (isRecording && recordingFor !== 'title')}
+                      title={
+                        isRecording && recordingFor === 'title' 
+                          ? 'Stop recording' 
+                          : isTranscribing 
+                          ? 'Processing...' 
+                          : 'Start recording'
+                      }
+                    >
+                      {isRecording && recordingFor === 'title' ? (
+                        <Square className="h-4 w-4" />
+                      ) : (
+                        <Mic className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
                 
                 {template.fields.map(field => renderField(field))}

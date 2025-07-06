@@ -20,10 +20,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { addJournalEntry } from "@/services/journalService";
+import { countWords } from "@/services/journalStatsService";
 import { toast } from "sonner";
 import { JournalTemplate } from "@/types/journal";
 import { getTemplate } from "@/services/templateService";
-import { FileText } from "lucide-react";
+import { FileText, Type } from "lucide-react";
 
 // Common schema for both standard and template forms
 const formSchema = z.object({
@@ -39,6 +40,7 @@ export function JournalEntryForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [template, setTemplate] = useState<JournalTemplate | null>(null);
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
+  const [wordCount, setWordCount] = useState(0);
   const router = useRouter();
   const searchParams = useSearchParams();
   const templateId = searchParams.get("templateId");
@@ -51,6 +53,15 @@ export function JournalEntryForm() {
       fields: {},
     },
   });
+
+  // Update word count when content changes
+  useEffect(() => {
+    const subscription = form.watch((value) => {
+      const content = value.content || '';
+      setWordCount(countWords(content));
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
 
   useEffect(() => {
     if (templateId) {
@@ -413,8 +424,12 @@ export function JournalEntryForm() {
                       {...field}
                     />
                   </FormControl>
-                  <FormDescription>
-                    Express your thoughts, ideas, or reflections
+                  <FormDescription className="flex items-center justify-between">
+                    <span>Express your thoughts, ideas, or reflections</span>
+                    <span className="flex items-center gap-1 text-xs">
+                      <Type className="h-3 w-3" />
+                      {wordCount} words
+                    </span>
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

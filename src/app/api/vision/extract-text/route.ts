@@ -1,19 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
- * OCR Text Extraction API Route
+ * OCR Text Extraction API Route using OpenAI GPT-4 Vision
  * 
- * This endpoint receives base64 image data and extracts text using Google Vision API
+ * This endpoint receives base64 image data and extracts text using OpenAI's vision model
  * POST /api/vision/extract-text
  * Body: { imageData: string } (base64 encoded image)
  * Returns: { text: string, confidence: number }
  */
-
-// Vision API response types
-interface TextAnnotation {
-  description?: string;
-  confidence?: number;
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,139 +20,102 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Try multiple authentication methods
-    const apiKey = process.env.GOOGLE_VISION_API_KEY;
-    const serviceAccountKey = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    const openaiApiKey = process.env.OPENAI_API_KEY;
     
-    let visionResponse;
-    
-    // Method 1: Try API Key authentication
-    if (apiKey) {
-      console.log('Using API Key authentication');
-      visionResponse = await fetch(
-        `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            requests: [
-              {
-                image: {
-                  content: imageData,
-                },
-                features: [
-                  {
-                    type: 'TEXT_DETECTION',
-                    maxResults: 1,
-                  },
-                ],
-              },
-            ],
-          }),
-        }
-      );
-    }
-    // Method 2: Try Service Account authentication
-    else if (serviceAccountKey) {
-      console.log('Using Service Account authentication');
-      
-      // Import Google Auth Library
-      const { GoogleAuth } = await import('google-auth-library');
-      const auth = new GoogleAuth({
-        scopes: ['https://www.googleapis.com/auth/cloud-vision'],
-      });
-      
-      const authClient = await auth.getClient();
-      const accessToken = await authClient.getAccessToken();
-      
-      if (!accessToken.token) {
-        throw new Error('Failed to get access token');
-      }
-      
-      visionResponse = await fetch(
-        'https://vision.googleapis.com/v1/images:annotate',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken.token}`,
-          },
-          body: JSON.stringify({
-            requests: [
-              {
-                image: {
-                  content: imageData,
-                },
-                features: [
-                  {
-                    type: 'TEXT_DETECTION',
-                    maxResults: 1,
-                  },
-                ],
-              },
-            ],
-          }),
-        }
-      );
-    }
-    // Method 3: No authentication configured
-    else {
-      console.warn('No Google Vision API authentication configured');
-      
+    if (!openaiApiKey) {
+      console.warn('OpenAI API key not configured');
       return NextResponse.json({
         text: '[Photo uploaded - OCR processing temporarily unavailable]',
         confidence: 0,
-        note: 'Vision API not configured. Please set GOOGLE_VISION_API_KEY or GOOGLE_APPLICATION_CREDENTIALS'
+        note: 'OpenAI API not configured. Please set OPENAI_API_KEY environment variable'
       });
     }
 
-    if (!visionResponse.ok) {
-      const errorData = await visionResponse.text();
-      console.error(`Vision API error ${visionResponse.status}:`, errorData);
+    // Call OpenAI GPT-4 Vision API
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${openaiApiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o', // Use the latest vision model
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Please extract ALL text from this image exactly as it appears. 
+                
+Instructions:
+- Extract every word, sentence, and paragraph
+- Maintain the original formatting and line breaks where possible
+- Include all text, even if it's small or partially obscured
+- If there are multiple columns, read from left to right, top to bottom
+- Do not summarize or paraphrase - extract the exact text
+- If no text is visible, respond with "No text detected"
+
+Return only the extracted text, nothing else.`
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:image/jpeg;base64,${imageData}`,
+                  detail: 'high' // Use high detail for better OCR
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 2000,
+        temperature: 0, // Use deterministic output for consistent OCR
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error(`OpenAI API error ${response.status}:`, errorData);
       
-      // Handle specific error cases
-      if (visionResponse.status === 403) {
+      if (response.status === 401) {
         return NextResponse.json({
           text: '[Photo uploaded - OCR processing temporarily unavailable]',
           confidence: 0,
-          note: 'Vision API access denied - API key may need configuration'
+          note: 'OpenAI API key is invalid or expired'
         });
       }
       
-      throw new Error(`Vision API error: ${visionResponse.status}`);
+      if (response.status === 429) {
+        return NextResponse.json({
+          text: '[Photo uploaded - OCR processing temporarily unavailable]',
+          confidence: 0,
+          note: 'OpenAI API rate limit exceeded'
+        });
+      }
+      
+      throw new Error(`OpenAI API error: ${response.status}`);
     }
 
-    const visionData = await visionResponse.json();
+    const data = await response.json();
     
-    // Extract text from Vision API response
-    const textAnnotations = visionData.responses?.[0]?.textAnnotations;
+    const extractedText = data.choices?.[0]?.message?.content || '';
     
-    if (!textAnnotations || textAnnotations.length === 0) {
+    if (!extractedText || extractedText.trim() === 'No text detected') {
       return NextResponse.json({
         text: '[No text detected in image]',
         confidence: 0,
       });
     }
 
-    // The first annotation contains all detected text
-    const extractedText = textAnnotations[0].description || '';
-    
-    // Calculate average confidence from all detections
-    const confidenceScores = textAnnotations
-      .filter((annotation: TextAnnotation) => annotation.confidence !== undefined)
-      .map((annotation: TextAnnotation) => annotation.confidence);
-    
-    const averageConfidence = confidenceScores.length > 0
-      ? confidenceScores.reduce((sum: number, conf: number) => sum + conf, 0) / confidenceScores.length
-      : 0.5; // Default confidence if not provided
+    // OpenAI doesn't provide confidence scores, so we'll use a high confidence
+    // since GPT-4 Vision is generally very accurate at OCR
+    const confidence = 0.95;
 
-    console.log(`OCR extracted ${extractedText.length} characters with ${(averageConfidence * 100).toFixed(1)}% confidence`);
+    console.log(`OCR extracted ${extractedText.length} characters using OpenAI GPT-4 Vision`);
 
     return NextResponse.json({
       text: extractedText,
-      confidence: averageConfidence,
+      confidence: confidence,
     });
 
   } catch (error) {

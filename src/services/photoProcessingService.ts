@@ -115,10 +115,24 @@ export function validatePhotoFile(file: File): { isValid: boolean; error?: strin
     return { isValid: false, error: 'File must be an image' };
   }
   
-  // Check file size (10MB limit)
-  const maxSize = 10 * 1024 * 1024; // 10MB
+  // Check file size (25MB limit)
+  // 
+  // TECHNICAL NOTE: This validation allows up to 25MB image files.
+  // However, there are important platform constraints to be aware of:
+  // 
+  // 1. Vercel Functions have a 4.5MB request body limit
+  // 2. Images are converted to base64 encoding (+33% size increase) 
+  // 3. Effective limit on Vercel is ~3.4MB original file size
+  // 4. Google Vision API supports up to 20MB files, but has 10MB JSON request limit
+  // 
+  // Users may still encounter errors with large files due to these platform limitations.
+  // For files larger than ~3-4MB, consider implementing:
+  // - Direct cloud storage uploads with pre-signed URLs
+  // - Client-side image compression before upload
+  // - Chunked/streaming upload mechanisms
+  const maxSize = 25 * 1024 * 1024; // 25MB - increased from 10MB per user request
   if (file.size > maxSize) {
-    return { isValid: false, error: 'Image must be smaller than 10MB' };
+    return { isValid: false, error: 'Image must be smaller than 25MB' };
   }
   
   // Check for supported formats

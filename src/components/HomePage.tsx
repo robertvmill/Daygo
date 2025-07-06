@@ -5,22 +5,34 @@ import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { getJournalEntries } from "@/services/journalService"
-import { CalendarDays, FileText, PlusCircle, Clock, Eye, BookOpen, Calendar, Edit, AlertTriangle, Bot } from "lucide-react"
+import { calculateJournalStats, JournalStats, getDailyWordCounts } from "@/services/journalStatsService"
+import { getAllGoalProgress, GoalProgress } from "@/services/writingGoalsService"
+import { CalendarDays, FileText, PlusCircle, Clock, Eye, BookOpen, Calendar, Edit, AlertTriangle, Bot, Target, TrendingUp } from "lucide-react"
 import { format } from "date-fns"
 import { JournalEntryForm } from "./JournalEntryForm"
+import { WritingGoalModal } from "./WritingGoalModal"
+import { DailyWordChart } from "@/components/ui/daily-word-chart"
 import { getAuth, onAuthStateChanged } from "firebase/auth"
 import { toast } from "sonner"
 import { JournalEntry } from "@/types/journal"
 import { FirebaseError } from "firebase/app"
 
 export function HomePage() {
-  const [journalStats, setJournalStats] = useState({
+  const [journalStats, setJournalStats] = useState<JournalStats>({
     totalEntries: 0,
     thisWeek: 0,
     thisMonth: 0,
-    latestEntry: null as Date | null,
-    streakDays: 0
+    latestEntry: null,
+    streakDays: 0,
+    totalWords: 0,
+    wordsThisWeek: 0,
+    wordsThisMonth: 0,
+    wordsToday: 0,
+    averageWordsPerEntry: 0
   })
+  const [goalProgress, setGoalProgress] = useState<GoalProgress[]>([])
+  const [dailyWordData, setDailyWordData] = useState<Array<{date: string, words: number}>>([])
+  const [showGoalModal, setShowGoalModal] = useState(false)
   const [recentEntries, setRecentEntries] = useState<JournalEntry[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [authInitialized, setAuthInitialized] = useState(false)
@@ -52,85 +64,29 @@ export function HomePage() {
     const fetchStats = async () => {
       try {
         setError(null) // Reset error state
-        const entries = await getJournalEntries()
         
-        // Store recent entries for display
+        // Get journal entries for recent entries display
+        const entries = await getJournalEntries()
         setRecentEntries(entries.slice(0, 3))
         
-        if (!entries || entries.length === 0) {
-          setJournalStats({
-            totalEntries: 0,
-            thisWeek: 0,
-            thisMonth: 0,
-            latestEntry: null,
-            streakDays: 0
-          })
-          setIsLoading(false)
-          return
+        // Calculate comprehensive stats including word counts
+        const stats = await calculateJournalStats()
+        setJournalStats(stats)
+        
+        // Get daily word counts for the last 7 days
+        const dailyData = await getDailyWordCounts(7)
+        setDailyWordData(dailyData)
+        
+        // Get goal progress if there are any words written
+        if (stats.totalWords > 0) {
+          const progress = await getAllGoalProgress(
+            stats.wordsToday,
+            stats.wordsThisWeek,
+            stats.wordsThisMonth
+          )
+          setGoalProgress(progress)
         }
 
-        // Get current date information
-        const now = new Date()
-        const oneWeekAgo = new Date(now)
-        oneWeekAgo.setDate(now.getDate() - 7)
-        
-        const oneMonthAgo = new Date(now)
-        oneMonthAgo.setMonth(now.getMonth() - 1)
-        
-        // Calculate stats
-        const entriesThisWeek = entries.filter(entry => 
-          entry.createdAt && new Date(entry.createdAt.seconds * 1000) >= oneWeekAgo
-        )
-        
-        const entriesThisMonth = entries.filter(entry => 
-          entry.createdAt && new Date(entry.createdAt.seconds * 1000) >= oneMonthAgo
-        )
-        
-        // Calculate streak (simplified - actual implementation would be more complex)
-        // This is a placeholder implementation
-        let streakDays = 0
-        const entryDates = entries
-          .filter(entry => entry.createdAt)
-          .map(entry => new Date(entry.createdAt!.seconds * 1000).toDateString())
-          .filter((date, index, self) => self.indexOf(date) === index) // Unique dates only
-        
-        // Sort dates in descending order
-        entryDates.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
-        
-        // Check if last entry was today or yesterday
-        const today = new Date().toDateString()
-        const yesterday = new Date(now)
-        yesterday.setDate(now.getDate() - 1)
-        const yesterdayString = yesterday.toDateString()
-        
-        // If last entry was today or yesterday, count streak
-        if (entryDates[0] === today || entryDates[0] === yesterdayString) {
-          streakDays = 1
-          
-          // Count consecutive days
-          for (let i = 1; i < entryDates.length; i++) {
-            const currentDate = new Date(entryDates[i-1])
-            currentDate.setDate(currentDate.getDate() - 1)
-            
-            if (currentDate.toDateString() === entryDates[i]) {
-              streakDays++
-            } else {
-              break
-            }
-          }
-        }
-        
-        // Get latest entry date
-        const latestEntry = entries[0].createdAt ? 
-          new Date(entries[0].createdAt.seconds * 1000) : null
-        
-        setJournalStats({
-          totalEntries: entries.length,
-          thisWeek: entriesThisWeek.length,
-          thisMonth: entriesThisMonth.length,
-          latestEntry,
-          streakDays
-        })
         
         setIsLoading(false)
       } catch (error: unknown) {
@@ -152,9 +108,16 @@ export function HomePage() {
           thisWeek: 0,
           thisMonth: 0,
           latestEntry: null,
-          streakDays: 0
+          streakDays: 0,
+          totalWords: 0,
+          wordsThisWeek: 0,
+          wordsThisMonth: 0,
+          wordsToday: 0,
+          averageWordsPerEntry: 0
         })
         setRecentEntries([])
+        setGoalProgress([])
+        setDailyWordData([])
         setIsLoading(false)
       }
     }
@@ -176,6 +139,10 @@ export function HomePage() {
 
   const handleAiChat = () => {
     router.push("/ai-chat")
+  }
+
+  const handleSetGoal = () => {
+    setShowGoalModal(true)
   }
 
   const handleLogin = () => {
@@ -381,75 +348,169 @@ export function HomePage() {
       
       {/* Stats Section */}
       <div>
-        <h2 className="text-xl font-semibold mb-4">Your Journal Stats</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold">Your Journal Stats</h2>
+          <Button variant="outline" size="sm" onClick={handleSetGoal}>
+            <Target className="mr-2 h-4 w-4" />
+            Set Writing Goal
+          </Button>
+        </div>
         
-        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center text-lg">
-                <FileText className="mr-2 h-5 w-5" />
+              <CardTitle className="flex items-center text-sm">
+                <FileText className="mr-2 h-4 w-4" />
                 Total Entries
               </CardTitle>
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="h-8 bg-muted animate-pulse rounded" />
+                <div className="h-6 bg-muted animate-pulse rounded" />
               ) : (
-                <p className="text-3xl font-bold">{journalStats.totalEntries}</p>
+                <p className="text-2xl font-bold">{journalStats.totalEntries}</p>
               )}
             </CardContent>
           </Card>
           
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center text-lg">
-                <CalendarDays className="mr-2 h-5 w-5" />
+              <CardTitle className="flex items-center text-sm">
+                <CalendarDays className="mr-2 h-4 w-4" />
                 This Week
               </CardTitle>
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="h-8 bg-muted animate-pulse rounded" />
+                <div className="h-6 bg-muted animate-pulse rounded" />
               ) : (
-                <p className="text-3xl font-bold">{journalStats.thisWeek}</p>
+                <p className="text-2xl font-bold">{journalStats.thisWeek}</p>
               )}
             </CardContent>
           </Card>
           
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center text-lg">
-                <PlusCircle className="mr-2 h-5 w-5" />
+              <CardTitle className="flex items-center text-sm">
+                <PlusCircle className="mr-2 h-4 w-4" />
                 Streak
               </CardTitle>
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="h-8 bg-muted animate-pulse rounded" />
+                <div className="h-6 bg-muted animate-pulse rounded" />
               ) : (
-                <p className="text-3xl font-bold">{journalStats.streakDays} {journalStats.streakDays === 1 ? 'day' : 'days'}</p>
+                <p className="text-2xl font-bold">{journalStats.streakDays} {journalStats.streakDays === 1 ? 'day' : 'days'}</p>
               )}
             </CardContent>
           </Card>
           
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center text-lg">
-                <Clock className="mr-2 h-5 w-5" />
+              <CardTitle className="flex items-center text-sm">
+                <TrendingUp className="mr-2 h-4 w-4" />
+                Total Words
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="h-6 bg-muted animate-pulse rounded" />
+              ) : (
+                <p className="text-2xl font-bold">{journalStats.totalWords.toLocaleString()}</p>
+              )}
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center text-sm">
+                <Edit className="mr-2 h-4 w-4" />
+                Words Today
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="h-6 bg-muted animate-pulse rounded" />
+              ) : (
+                <p className="text-2xl font-bold">{journalStats.wordsToday}</p>
+              )}
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center text-sm">
+                <Clock className="mr-2 h-4 w-4" />
                 Last Entry
               </CardTitle>
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="h-8 bg-muted animate-pulse rounded" />
+                <div className="h-6 bg-muted animate-pulse rounded" />
               ) : journalStats.latestEntry ? (
-                <p className="text-lg font-medium">{format(journalStats.latestEntry, 'MMM d, yyyy')}</p>
+                <p className="text-sm font-medium">{format(journalStats.latestEntry, 'MMM d')}</p>
               ) : (
-                <p className="text-muted-foreground">No entries yet</p>
+                <p className="text-xs text-muted-foreground">No entries</p>
               )}
             </CardContent>
           </Card>
         </div>
+        
+        {/* Goal Progress Section */}
+        {goalProgress.length > 0 && (
+          <div className="mt-6">
+            <h3 className="text-lg font-medium mb-3">Writing Goals Progress</h3>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {goalProgress.map((progress, index) => (
+                <Card key={index} className={`border ${progress.isCompleted ? 'border-green-200 bg-green-50 dark:bg-green-950/20' : 'border-blue-200 bg-blue-50 dark:bg-blue-950/20'}`}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center justify-between text-sm">
+                      <span className="flex items-center">
+                        <Target className="mr-2 h-4 w-4" />
+                        {progress.goal.period.charAt(0).toUpperCase() + progress.goal.period.slice(1)} Goal
+                      </span>
+                      {progress.isCompleted && (
+                        <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Complete!</span>
+                      )}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span>{progress.currentWords} / {progress.goal.targetWords} words</span>
+                        <span className="font-medium">{progress.progressPercentage}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full transition-all ${progress.isCompleted ? 'bg-green-500' : 'bg-blue-500'}`}
+                          style={{ width: `${Math.min(progress.progressPercentage, 100)}%` }}
+                        />
+                      </div>
+                      {progress.daysLeft && (
+                        <p className="text-xs text-muted-foreground">
+                          {progress.daysLeft} days remaining
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            
+            {/* Daily Word Count Chart */}
+            <div className="mt-6">
+              <DailyWordChart data={dailyWordData} />
+            </div>
+          </div>
+        )}
+
+        {/* Daily Word Count Chart - standalone when no goals */}
+        {goalProgress.length === 0 && journalStats.totalWords > 0 && (
+          <div className="mt-6">
+            <h3 className="text-lg font-medium mb-3">Writing Progress</h3>
+            <DailyWordChart data={dailyWordData} />
+          </div>
+        )}
       </div>
 
       {/* Recent Entries Section */}
@@ -543,6 +604,17 @@ export function HomePage() {
           </Card>
         </div>
       )}
+      
+      {/* Writing Goal Modal */}
+      <WritingGoalModal 
+        open={showGoalModal} 
+        onOpenChange={setShowGoalModal}
+        currentStats={{
+          wordsToday: journalStats.wordsToday,
+          wordsThisWeek: journalStats.wordsThisWeek,
+          wordsThisMonth: journalStats.wordsThisMonth
+        }}
+      />
     </div>
   )
 } 

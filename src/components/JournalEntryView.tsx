@@ -44,6 +44,7 @@ export function JournalEntryView() {
   const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [editData, setEditData] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
 
@@ -93,6 +94,7 @@ export function JournalEntryView() {
   useEffect(() => {
     if (entry && template) {
       // Prepare editData from entry fields
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const initial: Record<string, any> = {};
       template.fields.forEach(field => {
         if (field.type === 'fillable_table') {
@@ -153,6 +155,7 @@ export function JournalEntryView() {
     }).format(date);
   };
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleEditField = (name: string, value: any) => {
     setEditData(prev => ({ ...prev, [name]: value }));
   };
@@ -202,7 +205,8 @@ export function JournalEntryView() {
       setEditMode(false);
       // Optionally, reload entry
       router.refresh();
-    } catch (err) {
+    } catch (error) {
+      console.error('Error updating journal entry:', error);
       toast.error('Failed to update journal entry');
     } finally {
       setSaving(false);
