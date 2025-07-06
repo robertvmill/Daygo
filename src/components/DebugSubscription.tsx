@@ -15,8 +15,16 @@ export function DebugSubscription() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  // Prevent hydration mismatch by ensuring component is mounted before showing dynamic content
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
+    if (!mounted) return;
+    
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -42,7 +50,7 @@ export function DebugSubscription() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [mounted]);
 
   const handleTestUpgrade = async () => {
     if (!userId) return;
@@ -51,8 +59,10 @@ export function DebugSubscription() {
       const response = await fetch('/api/test-upgrade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, tier: 'pro' })
+        body: JSON.stringify({ userId })
       });
+      
+      const result = await response.json();
       
       if (response.ok) {
         // Reload data
@@ -62,38 +72,9 @@ export function DebugSubscription() {
         ]);
         setSubscription(subData);
         setUsage(usageData);
-        alert('✅ Successfully upgraded to Pro!');
+        alert('✅ ' + result.message);
       } else {
-        const error = await response.json();
-        alert('❌ Failed to upgrade: ' + error.error);
-      }
-    } catch (err) {
-      alert('❌ Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
-    }
-  };
-
-  const handleTestDowngrade = async () => {
-    if (!userId) return;
-    
-    try {
-      const response = await fetch('/api/test-upgrade', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, tier: 'free' })
-      });
-      
-      if (response.ok) {
-        // Reload data
-        const [subData, usageData] = await Promise.all([
-          getUserSubscription(),
-          getUserUsage()
-        ]);
-        setSubscription(subData);
-        setUsage(usageData);
-        alert('✅ Successfully downgraded to Free!');
-      } else {
-        const error = await response.json();
-        alert('❌ Failed to downgrade: ' + error.error);
+        alert('❌ ' + result.error);
       }
     } catch (err) {
       alert('❌ Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
@@ -144,78 +125,73 @@ export function DebugSubscription() {
     }
   };
 
-  if (loading) return <div>Loading subscription data...</div>;
+  // Show loading state until component is mounted to prevent hydration mismatch
+  if (!mounted || loading) return <div>Loading subscription data...</div>;
   if (error) return <div className="text-red-500">Error: {error}</div>;
   if (!userId) return <div>Please log in to view subscription data</div>;
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>🔍 Debug: Subscription Status</CardTitle>
-          <CardDescription>Real-time data from Firestore collections</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <h3 className="font-semibold mb-2">📋 User Info</h3>
-            <p><strong>User ID:</strong> <code className="bg-gray-100 px-2 py-1 rounded">{userId}</code></p>
-            <p><strong>Email:</strong> <code className="bg-gray-100 px-2 py-1 rounded">{userEmail || 'Not available'}</code></p>
+    <Card className="w-full max-w-2xl mx-auto">
+      <CardHeader>
+        <CardTitle>Subscription Debug</CardTitle>
+        <CardDescription>Current subscription and usage information</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <h3 className="font-semibold mb-2">User Information</h3>
+          <div className="bg-gray-50 p-3 rounded space-y-1">
+            <p><strong>User ID:</strong> {userId}</p>
+            <p><strong>Email:</strong> {userEmail || 'No email'}</p>
           </div>
+        </div>
 
-          <div>
-            <h3 className="font-semibold mb-2">💳 Subscription (from `subscriptions` collection)</h3>
+        <div>
+          <h3 className="font-semibold mb-2">Subscription</h3>
+          <div className="bg-gray-50 p-3 rounded space-y-2">
             {subscription ? (
-              <div className="space-y-2">
-                <div><strong>Tier:</strong> <Badge variant={subscription.tier === 'pro' ? 'default' : 'secondary'}>{subscription.tier.toUpperCase()}</Badge></div>
-                <div><strong>Status:</strong> <Badge variant="outline">{subscription.status}</Badge></div>
-                <p><strong>Firestore Path:</strong> <code className="bg-gray-100 px-2 py-1 rounded">subscriptions/{userId}</code></p>
-                <p><strong>Created:</strong> {subscription.createdAt.toLocaleDateString()}</p>
-                <p><strong>Updated:</strong> {subscription.updatedAt.toLocaleDateString()}</p>
-              </div>
+              <>
+                <div className="flex items-center gap-2">
+                  <strong>Tier:</strong>
+                  <Badge variant={subscription.tier === 'pro' ? 'default' : 'secondary'}>
+                    {subscription.tier.toUpperCase()}
+                  </Badge>
+                </div>
+                <p><strong>Status:</strong> {subscription.status}</p>
+                <p><strong>Customer ID:</strong> {subscription.stripeCustomerId || 'None'}</p>
+                <p><strong>Subscription ID:</strong> {subscription.stripeSubscriptionId || 'None'}</p>
+                <p><strong>Created:</strong> {subscription.createdAt?.toDate?.()?.toLocaleString() || 'N/A'}</p>
+                <p><strong>Updated:</strong> {subscription.updatedAt?.toDate?.()?.toLocaleString() || 'N/A'}</p>
+              </>
             ) : (
               <p className="text-gray-500">No subscription data found</p>
             )}
           </div>
+        </div>
 
-          <div>
-            <h3 className="font-semibold mb-2">📊 Usage (from `usage` collection)</h3>
+        <div>
+          <h3 className="font-semibold mb-2">Usage</h3>
+          <div className="bg-gray-50 p-3 rounded space-y-1">
             {usage ? (
-              <div className="space-y-2">
+              <>
                 <p><strong>Journal Entries:</strong> {usage.journalEntriesCount}</p>
                 <p><strong>Templates:</strong> {usage.templatesCount}</p>
-                <p><strong>Firestore Path:</strong> <code className="bg-gray-100 px-2 py-1 rounded">usage/{userId}</code></p>
-                <p><strong>Last Updated:</strong> {usage.lastUpdated.toLocaleDateString()}</p>
-              </div>
+                <p><strong>Last Updated:</strong> {usage.lastUpdated?.toDate?.()?.toLocaleString() || 'N/A'}</p>
+              </>
             ) : (
               <p className="text-gray-500">No usage data found</p>
             )}
           </div>
+        </div>
 
-          <div className="space-y-4 pt-4 border-t">
-            <div>
-              <h3 className="font-semibold mb-2">🔧 Production Actions</h3>
-              <Button onClick={handleFixSubscription} className="bg-green-600 hover:bg-green-700">
-                🔄 Fix My Subscription (Syncs with Stripe)
-              </Button>
-              <p className="text-xs text-muted-foreground mt-1">
-                This verifies your actual Stripe purchase and updates Firestore accordingly
-              </p>
-            </div>
-            
-            <div>
-              <h3 className="font-semibold mb-2">🧪 Test Actions (Development Only)</h3>
-              <div className="space-x-2">
-                <Button onClick={handleTestUpgrade} disabled={subscription?.tier === 'pro'}>
-                  ⬆️ Test Upgrade to Pro
-                </Button>
-                <Button onClick={handleTestDowngrade} variant="outline" disabled={subscription?.tier === 'free'}>
-                  ⬇️ Test Downgrade to Free
-                </Button>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        <div className="flex gap-2">
+          <Button onClick={handleTestUpgrade} variant="outline" size="sm">
+            Test Upgrade to Pro
+          </Button>
+          <Button onClick={handleFixSubscription} variant="outline" size="sm">
+            Fix Subscription
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 } 

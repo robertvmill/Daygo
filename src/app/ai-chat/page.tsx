@@ -256,6 +256,8 @@ export default function AiChatPage() {
         and provide thoughtful responses to help users with their personal growth and self-awareness.
         Be supportive, thoughtful, and personalized in your responses.
         
+        IMPORTANT: Never include debug information, JSON objects, or technical messages like {"type":"step-start"} in your responses. Only provide natural, conversational responses to users.
+        
         You have access to the following tools:
         1. A weather tool that you can use to get the current weather in a specific location (in Fahrenheit).
         2. A temperature conversion tool that can convert Fahrenheit to Celsius.
@@ -265,7 +267,9 @@ export default function AiChatPage() {
         searchJournalEntries tool to find and reference their actual journal content.
         
         For journal queries, first use the search tool and then craft your response based on the content of their
-        entries. If no entries are found, acknowledge this and offer to help them journal about the topic.`
+        entries. If no entries are found, acknowledge this and offer to help them journal about the topic.
+        
+        Always respond in a natural, human-like manner without any debug output or technical information.`
       }
     ],
     maxSteps: 5,
@@ -354,18 +358,50 @@ export default function AiChatPage() {
     });
   };
 
+  // Helper function to check if message is complete (has final text response)
+  const isMessageComplete = (message: Message) => {
+    if (!message.parts || !Array.isArray(message.parts)) return false;
+    
+    // Check if there's substantive text content (not just debug info)
+    const hasRealContent = message.parts.some(part => {
+      if (part.type !== 'text') return false;
+      const text = (part as TextPart).text.trim();
+      
+      // Filter out debug/step messages with enhanced filtering
+      if (
+        text.includes('"type":"step-start"') ||
+        text === '{"type":"step-start"}' ||
+        text.includes('step-start') ||
+        text.startsWith('{"type":') ||
+        text === '' ||
+        text.startsWith('{') && text.endsWith('}') && text.includes('"type"') ||
+        /^\s*\{"type":\s*"[^"]*"\}\s*$/.test(text) ||
+        /^\s*\{"type":\s*"step-start"\}\s*$/.test(text)
+      ) {
+        return false;
+      }
+      
+      return text.length > 0;
+    });
+    
+    return hasRealContent;
+  };
+
   // Render different types of message parts (text, tool invocations, tool results)
   const renderMessagePart = (message: Message, part: MessagePart, index: number) => {
     switch (part.type) {
       case 'text':
         // Filter out debug text that shouldn't be shown to users
+        const text = part.text.trim();
         if (
-          part.text.includes('"type":"step-start"') || 
-          part.text.trim() === '{"type":"step-start"}' ||
-          part.text.includes('step-start') ||
-          part.text.trim().startsWith('{"type":') ||
-          part.text.trim() === '' ||
-          /^\s*\{"type":\s*"[^"]*"\}\s*$/.test(part.text.trim())
+          text.includes('"type":"step-start"') || 
+          text === '{"type":"step-start"}' ||
+          text.includes('step-start') ||
+          text.startsWith('{"type":') ||
+          text === '' ||
+          text.startsWith('{') && text.endsWith('}') && text.includes('"type"') ||
+          /^\s*\{"type":\s*"[^"]*"\}\s*$/.test(text) ||
+          /^\s*\{"type":\s*"step-start"\}\s*$/.test(text)
         ) {
           return null;
         }
@@ -395,10 +431,10 @@ export default function AiChatPage() {
           </div>
         );
       case 'tool-invocation':
-        // Only show loading animation if there's no corresponding tool result yet
+        // Only show loading animation if there's no corresponding tool result yet AND message isn't complete
         const toolName = part.toolInvocation.toolName;
-        if (hasToolResult(message, toolName)) {
-          return null; // Don't show loading if result already exists
+        if (hasToolResult(message, toolName) || isMessageComplete(message)) {
+          return null; // Don't show loading if result already exists or message is complete
         }
         
         // Show beautiful animated loading state for journal search

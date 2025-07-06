@@ -74,7 +74,10 @@ export function JournalEntryForm() {
           const initialFields: Record<string, string> = {};
           templateData.fields.forEach(field => {
             console.log(`Initializing field: ${field.name}, type: ${field.type}`);
-            initialFields[field.name] = field.type === 'boolean' ? 'false' : '';
+            // Don't initialize boolean fields with 'false' - leave them undefined so validation works
+            if (field.type !== 'boolean') {
+              initialFields[field.name] = '';
+            }
           });
           
           console.log("Initial fields:", initialFields);
@@ -117,10 +120,16 @@ export function JournalEntryForm() {
         // Check for required fields
         const missingRequiredFields = template.fields
           .filter(field => {
-            // Check if this field is required and either doesn't exist or is empty
-            return field.required && 
-              (typeof values.fields?.[field.name] === 'undefined' || 
-               values.fields[field.name]?.trim() === '');
+            if (!field.required) return false;
+            
+            // For boolean fields, check if a selection was made (not undefined)
+            if (field.type === 'boolean') {
+              return typeof values.fields?.[field.name] === 'undefined';
+            }
+            
+            // For other fields, check if they exist and are not empty
+            return (typeof values.fields?.[field.name] === 'undefined' || 
+                    values.fields[field.name]?.trim() === '');
           })
           .map(field => field.name);
 
@@ -286,21 +295,25 @@ export function JournalEntryForm() {
                             required={templateField.required}
                           />
                         ) : templateField.type === "boolean" ? (
-                          <div className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`checkbox-${templateField.name}`}
-                              checked={field.value === "true"}
-                              onCheckedChange={(checked) => {
-                                field.onChange(checked ? "true" : "false");
-                              }}
-                              required={templateField.required}
-                            />
-                            <label
-                              htmlFor={`checkbox-${templateField.name}`}
-                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant={field.value === "true" ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => field.onChange("true")}
+                              className="min-w-[60px]"
                             >
-                              Yes
-                            </label>
+                              Y
+                            </Button>
+                            <Button
+                              type="button"
+                              variant={field.value === "false" ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => field.onChange("false")}
+                              className="min-w-[60px]"
+                            >
+                              N
+                            </Button>
                           </div>
                         ) : templateField.type === "mantra" ? (
                           <div className="space-y-4">

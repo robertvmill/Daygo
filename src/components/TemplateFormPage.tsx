@@ -88,7 +88,7 @@ const generateFieldName = (label: string): string => {
 const FIELD_TYPES = [
   { id: "text", label: "Short Text", icon: Type },
   { id: "textarea", label: "Long Text", icon: AlignLeft },
-  { id: "boolean", label: "Checkbox", icon: ToggleLeft },
+  { id: "boolean", label: "Yes/No", icon: ToggleLeft },
   { id: "mantra", label: "Mantra", icon: Quote },
   { id: "table", label: "Static Table", icon: TableIcon },
   { id: "fillable_table", label: "Fillable Table", icon: TableIcon }
@@ -832,7 +832,7 @@ export function TemplateFormPage() {
                                                   : field.type === "textarea"
                                                   ? "A multi-line input field for longer responses"
                                                   : field.type === "boolean"
-                                                  ? "A simple yes/no checkbox question"
+                                                  ? "A simple yes/no question with two button options"
                                                   : "A single line input field"}
                                               </p>
                                             </div>

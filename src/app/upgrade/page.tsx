@@ -4,13 +4,14 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Sparkles, Zap, Users, Crown, ArrowLeft } from "lucide-react";
+import { Check, Sparkles, Zap, Users, Crown, ArrowLeft, RefreshCw } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbLink } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { UsageLimitBanner } from "@/components/UsageLimitBanner";
 import { DebugSubscription } from "@/components/DebugSubscription";
+import { SubscriptionDebug } from "@/components/SubscriptionDebug";
 import { PRICING, SUBSCRIPTION_TIERS } from "@/types/subscription";
 import { getUserSubscription, getUserUsage } from "@/services/subscriptionService";
 import type { UserSubscription, UsageStats } from "@/types/subscription";
@@ -25,9 +26,17 @@ export default function UpgradePage() {
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [usage, setUsage] = useState<UsageStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const searchParams = useSearchParams();
 
+  // Prevent hydration mismatch by ensuring component is mounted before showing dynamic content
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    
     const loadData = async () => {
       try {
         const [subscriptionData, usageData] = await Promise.all([
@@ -44,10 +53,12 @@ export default function UpgradePage() {
     };
 
     loadData();
-  }, []);
+  }, [mounted]);
 
   // Handle return from Stripe checkout
   useEffect(() => {
+    if (!mounted) return;
+    
     const success = searchParams.get('success');
     const canceled = searchParams.get('canceled');
     const sessionId = searchParams.get('session_id');
@@ -55,20 +66,44 @@ export default function UpgradePage() {
     if (success === 'true') {
       toast.success('🎉 Welcome to Pro! Your subscription has been activated.');
       
-      // Refresh subscription data after successful checkout
+      // Refresh subscription data after successful checkout with retry logic
       const refreshData = async () => {
         try {
-          // Add a small delay to ensure webhook has processed
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          let attempts = 0;
+          const maxAttempts = 10; // Try for up to 20 seconds
           
-          const [subscriptionData, usageData] = await Promise.all([
-            getUserSubscription(),
-            getUserUsage()
-          ]);
-          setSubscription(subscriptionData);
-          setUsage(usageData);
+          while (attempts < maxAttempts) {
+            console.log(`Refreshing subscription data (attempt ${attempts + 1}/${maxAttempts})...`);
+            
+            const [subscriptionData, usageData] = await Promise.all([
+              getUserSubscription(),
+              getUserUsage()
+            ]);
+            
+            // Check if subscription tier has been updated
+            if (subscriptionData?.tier === 'pro' || subscriptionData?.tier === 'team') {
+              console.log('✅ Subscription tier updated successfully:', subscriptionData.tier);
+              setSubscription(subscriptionData);
+              setUsage(usageData);
+              toast.success('🎉 Your Pro subscription is now active!');
+              break;
+            }
+            
+            attempts++;
+            if (attempts < maxAttempts) {
+              // Wait 2 seconds before next attempt
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            } else {
+              // Final attempt failed, still update the UI
+              console.warn('Subscription tier not updated after max attempts, showing current data');
+              setSubscription(subscriptionData);
+              setUsage(usageData);
+              toast.warning('Subscription may still be processing. Please refresh the page if you don\'t see Pro features.');
+            }
+          }
         } catch (error) {
           console.error('Error refreshing subscription data:', error);
+          toast.error('Failed to refresh subscription status. Please refresh the page.');
         }
       };
       
@@ -81,7 +116,7 @@ export default function UpgradePage() {
     if (success || canceled) {
       window.history.replaceState({}, '', '/upgrade');
     }
-  }, [searchParams]);
+  }, [searchParams, mounted]);
 
   const handleUpgradeToPro = async () => {
     try {
@@ -96,10 +131,12 @@ export default function UpgradePage() {
       // Get the price ID for Pro plan from environment variables
       const priceId = process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID;
       if (!priceId) {
-        toast.error('Pro plan pricing not configured. Please set NEXT_PUBLIC_STRIPE_PRO_PRICE_ID in your environment variables.');
+        console.error('Missing NEXT_PUBLIC_STRIPE_PRO_PRICE_ID environment variable');
+        toast.error('Pro plan pricing not configured. Please contact support.');
         return;
       }
 
+      console.log('🚀 Starting upgrade process with price ID:', priceId);
       toast.info('Redirecting to checkout...');
 
       // Get Firebase auth token
@@ -121,8 +158,11 @@ export default function UpgradePage() {
       const data = await response.json();
 
       if (!response.ok) {
+        console.error('Checkout session creation failed:', data);
         throw new Error(data.error || 'Failed to create checkout session');
       }
+
+      console.log('✅ Checkout session created:', data.sessionId);
 
       // Redirect to Stripe checkout
       if (data.url) {
@@ -158,7 +198,8 @@ export default function UpgradePage() {
     }
   };
 
-  if (loading) {
+  // Show loading state until component is mounted to prevent hydration mismatch
+  if (!mounted || loading) {
     return (
       <SidebarProvider>
         <AppSidebar />
@@ -207,7 +248,25 @@ export default function UpgradePage() {
 
           {/* Current Usage Banner */}
           {subscription && usage && (
-            <UsageLimitBanner type="detailed" showUpgradeButton={false} />
+            <div className="space-y-4">
+              <UsageLimitBanner type="detailed" showUpgradeButton={false} />
+              
+              {/* Manual Refresh Button for Pro users who just upgraded */}
+              {subscription?.tier === 'free' && (
+                <div className="flex justify-center">
+                  <Button 
+                    onClick={handleRefreshSubscription}
+                    variant="outline"
+                    size="sm"
+                    disabled={loading}
+                    className="gap-2"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                    {loading ? 'Refreshing...' : 'Refresh Subscription Status'}
+                  </Button>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Pricing Cards */}
@@ -391,7 +450,8 @@ export default function UpgradePage() {
           </div>
 
           {/* Debug Section - Development Only */}
-          <div className="pt-8 border-t">
+          <div className="pt-8 border-t space-y-6">
+            <SubscriptionDebug />
             <DebugSubscription />
           </div>
         </main>

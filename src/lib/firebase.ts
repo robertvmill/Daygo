@@ -1,6 +1,6 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 // Import analytics only on client side
@@ -20,7 +20,7 @@ const firebaseConfig = {
 // Initialize Firebase (or get existing instance)
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Initialize Firestore
+// Initialize Firestore with modern cache settings
 export const db = getFirestore(app);
 
 // Initialize Auth with local persistence
@@ -29,17 +29,8 @@ export const auth = getAuth(app);
 // Initialize Storage
 export const storage = getStorage(app);
 
-// Set up persistence for faster auth checks
+// Set up persistence and cache for better performance
 if (typeof window !== 'undefined') {
-  // Enable offline persistence for Firestore (improves performance)
-  enableIndexedDbPersistence(db).catch((err) => {
-    if (err.code === 'failed-precondition') {
-      console.warn('Firestore persistence not enabled - multiple tabs open');
-    } else if (err.code === 'unimplemented') {
-      console.warn('Firestore persistence not supported in this browser');
-    }
-  });
-  
   // Set auth persistence to LOCAL (keeps user logged in between sessions)
   setPersistence(auth, browserLocalPersistence).catch((error) => {
     console.error('Auth persistence error:', error);

@@ -33,6 +33,16 @@ export type JournalTemplate = {
   createdAt: Timestamp;
   userId: string;
   isDefault?: boolean;
+  // Public template fields
+  isPublic?: boolean;
+  authorName?: string; // User's display name for attribution
+  authorEmail?: string; // For admin identification and moderation
+  likes?: number; // Number of likes from users
+  category?: string; // Template category (e.g., "Mindfulness", "Productivity")
+  tags?: string[]; // Array of tags for better discovery
+  featured?: boolean; // Admin-controlled featured status
+  moderationStatus?: 'approved' | 'pending' | 'removed'; // For future moderation workflow
+  updatedAt?: Timestamp; // Track when template was last updated
 };
 
 // DayScore types

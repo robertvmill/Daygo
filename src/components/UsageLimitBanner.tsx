@@ -37,8 +37,16 @@ export function UsageLimitBanner({
   const [usage, setUsage] = useState<UsageStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  // Prevent hydration mismatch by ensuring component is mounted before showing dynamic content
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
+    if (!mounted) return;
+    
     const loadUsageData = async () => {
       try {
         setLoading(true);
@@ -59,7 +67,7 @@ export function UsageLimitBanner({
     };
 
     loadUsageData();
-  }, []);
+  }, [mounted]);
 
   const handleUpgrade = () => {
     // TODO: Implement upgrade flow (Stripe checkout)
@@ -68,7 +76,8 @@ export function UsageLimitBanner({
     window.open('/upgrade', '_blank');
   };
 
-  if (loading) {
+  // Show loading state until component is mounted to prevent hydration mismatch
+  if (!mounted || loading) {
     return (
       <div className={`animate-pulse ${className}`}>
         <div className="h-16 bg-muted rounded-md"></div>

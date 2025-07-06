@@ -26,9 +26,12 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Globe, Users } from "lucide-react";
 import { JournalTemplate, TemplateField } from "@/types/journal";
-import { addTemplate, updateTemplate } from "@/services/templateService";
+import { addTemplate, updateTemplate, makeTemplatePublic, makeTemplatePrivate } from "@/services/templateService";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { X } from "lucide-react";
 
 // Function to generate a valid field name from a display label
 const generateFieldName = (label: string): string => {
@@ -54,6 +57,10 @@ const templateSchema = z.object({
       required: z.boolean().default(false),
     })
   ).min(1, "At least one field is required"),
+  // Public template fields
+  isPublic: z.boolean().default(false),
+  category: z.string().optional(),
+  tags: z.array(z.string()).default([]),
 });
 
 type TemplateFormValues = z.infer<typeof templateSchema>;
@@ -66,10 +73,27 @@ interface TemplateFormProps {
 export function TemplateForm({ template, isEditing = false }: TemplateFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [newTag, setNewTag] = useState("");
+
+  // Available categories for public templates
+  const categories = [
+    "Mindfulness",
+    "Productivity", 
+    "Mental Health",
+    "Self-Improvement",
+    "Planning",
+    "Health & Wellness",
+    "Creativity",
+    "Learning",
+    "Other"
+  ];
 
   const defaultValues: TemplateFormValues = {
     name: template?.name || "",
     description: template?.description || "",
+    isPublic: template?.isPublic || false,
+    category: template?.category || "",
+    tags: template?.tags || [],
     fields: template?.fields?.map((field: TemplateField) => ({
       name: field.name,
       type: field.type,
@@ -130,13 +154,27 @@ export function TemplateForm({ template, isEditing = false }: TemplateFormProps)
         }))
       };
       
+      let templateId: string;
+      
       if (isEditing && template?.id) {
         await updateTemplate(template.id, processedData);
+        templateId = template.id;
         toast.success("Template updated successfully");
       } else {
-        await addTemplate(processedData);
+        const newTemplate = await addTemplate(processedData);
+        templateId = newTemplate.id;
         toast.success("Template created successfully");
       }
+
+      // Handle public/private status change
+      if (data.isPublic && (!template?.isPublic || isEditing)) {
+        await makeTemplatePublic(templateId, data.category, data.tags);
+        toast.success("Template is now public and available in the community!");
+      } else if (!data.isPublic && template?.isPublic) {
+        await makeTemplatePrivate(templateId);
+        toast.success("Template is now private");
+      }
+      
       router.push("/prompts");
     } catch (error) {
       console.error("Error saving template:", error);
@@ -154,6 +192,27 @@ export function TemplateForm({ template, isEditing = false }: TemplateFormProps)
       placeholder: "",
       required: false,
     });
+  };
+
+  const addTag = () => {
+    const trimmedTag = newTag.trim().toLowerCase();
+    if (trimmedTag && !form.getValues("tags").includes(trimmedTag)) {
+      const currentTags = form.getValues("tags");
+      form.setValue("tags", [...currentTags, trimmedTag]);
+      setNewTag("");
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    const currentTags = form.getValues("tags");
+    form.setValue("tags", currentTags.filter(tag => tag !== tagToRemove));
+  };
+
+  const handleTagKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addTag();
+    }
   };
 
   return (
@@ -196,6 +255,125 @@ export function TemplateForm({ template, isEditing = false }: TemplateFormProps)
               </FormItem>
             )}
           />
+
+          {/* Public Template Settings */}
+          <Card className="p-6">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <h3 className="font-medium flex items-center gap-2">
+                    <Globe className="h-4 w-4" />
+                    Community Sharing
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Make this template available to the Daygo community
+                  </p>
+                </div>
+                <FormField
+                  control={form.control}
+                  name="isPublic"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {form.watch("isPublic") && (
+                <div className="space-y-4 pt-4 border-t">
+                  <FormField
+                    control={form.control}
+                    name="category"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Category</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a category" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {categories.map((category) => (
+                              <SelectItem key={category} value={category}>
+                                {category}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          Help users discover your template by selecting a relevant category
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormItem>
+                    <FormLabel>Tags</FormLabel>
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Add a tag (e.g., gratitude, morning, habits)"
+                          value={newTag}
+                          onChange={(e) => setNewTag(e.target.value)}
+                          onKeyPress={handleTagKeyPress}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={addTag}
+                          disabled={!newTag.trim()}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {form.watch("tags").length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {form.watch("tags").map((tag, index) => (
+                            <Badge key={index} variant="secondary" className="flex items-center gap-1">
+                              {tag}
+                              <button
+                                type="button"
+                                onClick={() => removeTag(tag)}
+                                className="ml-1 hover:text-destructive"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <FormDescription>
+                      Add relevant tags to help users find your template (press Enter to add)
+                    </FormDescription>
+                  </FormItem>
+
+                  <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
+                    <Users className="h-4 w-4 text-blue-600 mt-0.5" />
+                    <div className="text-sm">
+                      <p className="font-medium text-blue-900 dark:text-blue-100">
+                        Community Guidelines
+                      </p>
+                      <p className="text-blue-700 dark:text-blue-200 mt-1">
+                        Your template will be immediately available to all users. Please ensure it's helpful and appropriate for the community.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
 
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -271,6 +449,8 @@ export function TemplateForm({ template, isEditing = false }: TemplateFormProps)
                           <FormDescription>
                             {field.value === "mantra" 
                               ? "A mantra field provides a larger text area with a completion checkbox"
+                              : field.value === "boolean"
+                              ? "Users will see two buttons (Y/N) to make their selection"
                               : "Type of input for this field"}
                           </FormDescription>
                           <FormMessage />

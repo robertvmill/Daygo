@@ -364,7 +364,13 @@ export default function NewJournalEntryPage() {
         toast.error(`Please upload a photo for: ${field.label}`);
         return;
       }
-      if (field.type !== 'file' && !formData[field.name]) {
+      if (field.type === 'boolean') {
+        // For boolean fields, check if a selection was made (not undefined)
+        if (formData[field.name] === undefined) {
+          toast.error(`Please fill in the required field: ${field.label}`);
+          return;
+        }
+      } else if (field.type !== 'file' && !formData[field.name]) {
         toast.error(`Please fill in the required field: ${field.label}`);
         return;
       }
@@ -737,15 +743,30 @@ export default function NewJournalEntryPage() {
         );
       case 'boolean':
         return (
-          <div key={field.name} className="flex items-center gap-2 pt-2">
-            <Checkbox
-              id={field.name}
-              checked={!!formData[field.name]}
-              onCheckedChange={(checked) => handleInputChange(field.name, checked as boolean)}
-            />
-            <Label htmlFor={field.name} className="cursor-pointer">
+          <div key={field.name} className="space-y-2">
+            <Label htmlFor={field.name}>
               {field.label} {field.required && <span className="text-destructive">*</span>}
             </Label>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={formData[field.name] === true ? "default" : "outline"}
+                size="sm"
+                onClick={() => handleInputChange(field.name, true)}
+                className="min-w-[60px]"
+              >
+                Y
+              </Button>
+              <Button
+                type="button"
+                variant={formData[field.name] === false ? "default" : "outline"}
+                size="sm"
+                onClick={() => handleInputChange(field.name, false)}
+                className="min-w-[60px]"
+              >
+                N
+              </Button>
+            </div>
           </div>
         );
       case 'mantra':
@@ -818,7 +839,7 @@ export default function NewJournalEntryPage() {
                     </tr>
                   </thead>
                   <tbody className="[&_tr:last-child]:border-0">
-                    {((formData[field.name] && typeof formData[field.name] === 'object' && (formData[field.name] as TableFormData).cells) || (field.tableData && field.tableData.cells) || (field.tableData && Array(field.tableData.rows).fill(null).map(() => Array(field.tableData.columns || 0).fill('')))).map((row: string[], rowIndex: number) => (
+                    {((formData[field.name] && typeof formData[field.name] === 'object' && (formData[field.name] as TableFormData).cells) || (field.tableData && field.tableData.cells) || (field.tableData && Array(field.tableData.rows || 0).fill(null).map(() => Array(field.tableData?.columns || 0).fill('')))).map((row: string[], rowIndex: number) => (
                       <tr key={`${field.name}-row-${rowIndex}`} className="border-b transition-colors hover:bg-muted/50">
                         {row.map((cell: string, cellIndex: number) => (
                           <td key={`${field.name}-cell-${rowIndex}-${cellIndex}`} className="p-2 align-middle">
@@ -828,7 +849,7 @@ export default function NewJournalEntryPage() {
                                 if (!field.tableData) return;
                                 const newTable = (formData[field.name] && typeof formData[field.name] === 'object' && (formData[field.name] as TableFormData).cells)
                                   ? (formData[field.name] as TableFormData).cells.map((r: string[], i: number) => i === rowIndex ? r.map((c, j) => j === cellIndex ? e.target.value : c) : r)
-                                  : (field.tableData.cells ? field.tableData.cells.map(r => [...r]) : Array(field.tableData.rows || 0).fill(null).map(() => Array(field.tableData?.columns || 0).fill('')));
+                                  : (field.tableData.cells ? field.tableData.cells.map(r => [...r]) : Array(field.tableData?.rows || 0).fill(null).map(() => Array(field.tableData?.columns || 0).fill('')));
                                 newTable[rowIndex][cellIndex] = e.target.value;
                                 setFormData((prev) => ({
                                   ...prev,
@@ -857,8 +878,8 @@ export default function NewJournalEntryPage() {
                     variant="outline"
                     onClick={() => {
                       if (!field.tableData) return;
-                      const current = (formData[field.name] && typeof formData[field.name] === 'object' && (formData[field.name] as TableFormData).cells) || field.tableData.cells || Array(field.tableData.rows || 0).fill(null).map(() => Array(field.tableData?.columns || 0).fill(''));
-                      const newRow = Array(field.tableData.columns || 0).fill('');
+                      const current = (formData[field.name] && typeof formData[field.name] === 'object' && (formData[field.name] as TableFormData).cells) || field.tableData.cells || Array(field.tableData?.rows || 0).fill(null).map(() => Array(field.tableData?.columns || 0).fill(''));
+                      const newRow = Array(field.tableData?.columns || 0).fill('');
                       const newTable = [...current, newRow];
                       setFormData((prev) => ({
                         ...prev,

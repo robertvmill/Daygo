@@ -114,7 +114,7 @@ export const addJournalEntry = async (journalData: JournalEntryInput) => {
       
       if (!embedResponse.ok) {
         let errorMessage = 'Failed to create embedding for journal entry';
-        let errorDetails = '';
+        let isAPIKeyError = false;
         
         try {
           const errorData = await embedResponse.json();
@@ -122,18 +122,24 @@ export const addJournalEntry = async (journalData: JournalEntryInput) => {
           
           if (errorData.error) {
             errorMessage = errorData.error;
-            errorDetails = errorData.details || '';
+            // Check if it's an API key related error
+            isAPIKeyError = errorMessage.includes('OPENAI_API_KEY') || errorMessage.includes('apiKey');
           }
         } catch (parseError) {
           console.error('Could not parse error response:', parseError);
           errorMessage = `Failed to create embedding (Status ${embedResponse.status}: ${embedResponse.statusText})`;
         }
         
-        console.error(errorMessage, errorDetails);
-        toast.error(`Failed to create embedding: ${errorMessage}`);
+        console.error(errorMessage);
         
-        // Create a toast that shows more details but still saves the entry
-        toast.error("Journal entry saved, but embedding failed. The AI assistant might not be able to find this entry.");
+        // Show user-friendly message instead of scary technical errors
+        if (isAPIKeyError) {
+          console.log("Entry saved successfully, but AI search indexing is not configured (missing OpenAI API key)");
+          toast.success("Journal entry saved successfully");
+        } else {
+          toast.success("Journal entry saved successfully");
+          console.warn("Note: AI search indexing failed, but entry was saved. The AI assistant might not be able to find this entry.");
+        }
       } else {
         console.log("Successfully created embedding for journal entry:", docRef.id);
         toast.success("Journal entry saved successfully");
@@ -142,8 +148,17 @@ export const addJournalEntry = async (journalData: JournalEntryInput) => {
       // Don't block the UI flow if embedding fails
       console.error('Error creating embedding:', embedError);
       
-      // Show a more descriptive error but confirm the entry was saved
-      toast.error(`Journal entry saved, but embedding failed: ${embedError instanceof Error ? embedError.message : 'Unknown error'}`);
+      // Check if it's an API key error
+      const errorMessage = embedError instanceof Error ? embedError.message : 'Unknown error';
+      const isAPIKeyError = errorMessage.includes('OPENAI_API_KEY') || errorMessage.includes('apiKey');
+      
+      if (isAPIKeyError) {
+        console.log("Entry saved successfully, but AI search indexing is not configured");
+        toast.success("Journal entry saved successfully");
+      } else {
+        console.warn("Entry saved, but AI search indexing failed:", errorMessage);
+        toast.success("Journal entry saved successfully");
+      }
     }
     
     return docRef.id;

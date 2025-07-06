@@ -82,9 +82,23 @@ export async function POST(req: Request) {
       });
     }
 
+    // Filter out debug messages from the messages array
+    const cleanMessages = messages.map(message => {
+      if (message.role === 'assistant' && message.content) {
+        // Remove debug JSON objects and step-start messages
+        const cleanContent = message.content
+          .replace(/\{"type":"step-start"\}/g, '')
+          .replace(/\{"type":"[^"]*"\}/g, '')
+          .replace(/^\s*\{"[^"]*":\s*"[^"]*"\}\s*$/gm, '')
+          .trim();
+        return { ...message, content: cleanContent };
+      }
+      return message;
+    });
+
     const result = streamText({
       model: openai('gpt-4o'),
-      messages,
+      messages: cleanMessages,
       tools: {
         weather: tool({
           description: 'Get the weather in a location (fahrenheit)',

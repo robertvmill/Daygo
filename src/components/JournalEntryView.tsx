@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { JournalEntry, TemplateField } from "@/types/journal";
-import { getJournalEntry, deleteJournalEntry } from "@/services/journalService";
+import { getJournalEntry, deleteJournalEntry, updateJournalEntry } from "@/services/journalService";
 import { getTemplate } from "@/services/templateService";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -231,11 +231,26 @@ export function JournalEntryView() {
           return (
             <div className="mb-4">
               <h3 className="text-base font-semibold mb-1">{field.label}</h3>
-              <input
-                type="checkbox"
-                checked={editData[field.name] === 'true' || editData[field.name] === true}
-                onChange={e => handleEditField(field.name, e.target.checked)}
-              />
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={editData[field.name] === 'true' || editData[field.name] === true ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handleEditField(field.name, true)}
+                  className="min-w-[60px]"
+                >
+                  Y
+                </Button>
+                <Button
+                  type="button"
+                  variant={editData[field.name] === 'false' || editData[field.name] === false ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handleEditField(field.name, false)}
+                  className="min-w-[60px]"
+                >
+                  N
+                </Button>
+              </div>
             </div>
           );
         case 'fillable_table': {

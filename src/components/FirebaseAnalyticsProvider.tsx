@@ -12,6 +12,12 @@ export function FirebaseAnalyticsProvider({ children }: { children: React.ReactN
   const pathname = usePathname();
   const router = useRouter();
   const [authChecked, setAuthChecked] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  // Prevent hydration mismatch by ensuring component is mounted before showing dynamic content
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Helper function to force redirect using window.location if needed
   const forceRedirect = (path: string) => {
@@ -23,6 +29,8 @@ export function FirebaseAnalyticsProvider({ children }: { children: React.ReactN
   };
 
   useEffect(() => {
+    if (!mounted) return;
+    
     // Initialize Firebase Analytics
     const analytics = initializeAnalytics();
     
@@ -89,10 +97,11 @@ export function FirebaseAnalyticsProvider({ children }: { children: React.ReactN
     });
 
     return () => unsubscribe();
-  }, [pathname, router]);
+  }, [pathname, router, mounted]);
 
   // Show loading indicator only for protected pages and only briefly
-  if (!authChecked && !publicPages.includes(pathname)) {
+  // Also prevent hydration mismatch by not showing different content until mounted
+  if (!mounted || (!authChecked && !publicPages.includes(pathname))) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="animate-pulse">Loading...</div>

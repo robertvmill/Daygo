@@ -68,10 +68,12 @@ export interface SubscriptionMetadata {
   userId: string;
   tier: 'pro' | 'team';
   previousTier?: string;
+  [key: string]: string | undefined; // Index signature for Stripe metadata
 }
 
 export interface CustomerMetadata {
   userId: string;
   email: string;
   name?: string;
+  [key: string]: string | undefined; // Index signature for Stripe metadata
 } 

@@ -5,6 +5,7 @@ import { db, auth } from "@/lib/firebase";
 import { JournalTemplate } from "@/types/journal";
 
 const COLLECTION_NAME = 'templates';
+const ADMIN_EMAIL = 'bertmill19@gmail.com'; // Admin email for moderation
 
 // Collection reference
 const templatesRef = collection(db, COLLECTION_NAME);
@@ -82,7 +83,8 @@ export async function addTemplate(template: Omit<JournalTemplate, "id" | "create
       id: docRef.id,
       ...template,
       fields: validatedFields,
-      userId
+      userId,
+      createdAt: serverTimestamp()
     };
   } catch (error) {
     console.error("Error adding template:", error);
@@ -124,9 +126,9 @@ export async function saveCommunityTemplate(template: {
             fieldType = field.type as 'text' | 'textarea' | 'boolean' | 'mantra' | 'table';
           } else if (field.type === 'longText') {
             fieldType = 'textarea';
-          } else if (field.type === 'checkbox') {
+                  } else if (field.type === 'checkbox' || field.type === 'yes_no') {
             fieldType = 'boolean';
-          }
+        }
         }
         
         return {
@@ -423,4 +425,200 @@ async function clearDefaultTemplates() {
   );
   
   await Promise.all(updatePromises);
+}
+
+// Make a template public
+export async function makeTemplatePublic(
+  templateId: string, 
+  category?: string, 
+  tags?: string[]
+) {
+  try {
+    if (!auth.currentUser) {
+      throw new Error("User must be logged in to make templates public");
+    }
+
+    const user = auth.currentUser;
+    const templateRef = doc(db, COLLECTION_NAME, templateId);
+    
+    // Get user's display name for attribution
+    const authorName = user.displayName || user.email?.split('@')[0] || 'Anonymous User';
+    
+    await updateDoc(templateRef, {
+      isPublic: true,
+      authorName,
+      authorEmail: user.email,
+      likes: 0,
+      category: category || 'Other',
+      tags: tags || [],
+      featured: false,
+      moderationStatus: 'approved', // Immediately approved as per requirements
+      updatedAt: serverTimestamp()
+    });
+    
+    return { success: true };
+  } catch (error) {
+    console.error("Error making template public:", error);
+    throw error;
+  }
+}
+
+// Make a template private
+export async function makeTemplatePrivate(templateId: string) {
+  try {
+    if (!auth.currentUser) {
+      throw new Error("User must be logged in to make templates private");
+    }
+
+    const templateRef = doc(db, COLLECTION_NAME, templateId);
+    
+    await updateDoc(templateRef, {
+      isPublic: false,
+      updatedAt: serverTimestamp()
+    });
+    
+    return { success: true };
+  } catch (error) {
+    console.error("Error making template private:", error);
+    throw error;
+  }
+}
+
+// Get all public templates for community page
+export async function getPublicTemplates(): Promise<JournalTemplate[]> {
+  try {
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where('isPublic', '==', true),
+      where('moderationStatus', '==', 'approved'),
+      orderBy('likes', 'desc'),
+      orderBy('createdAt', 'desc')
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const templates: JournalTemplate[] = [];
+    
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      templates.push({
+        id: doc.id,
+        name: data.name,
+        description: data.description,
+        fields: data.fields || [],
+        userId: data.userId,
+        createdAt: data.createdAt,
+        isPublic: data.isPublic,
+        authorName: data.authorName,
+        authorEmail: data.authorEmail,
+        likes: data.likes || 0,
+        category: data.category,
+        tags: data.tags || [],
+        featured: data.featured || false,
+        moderationStatus: data.moderationStatus,
+        updatedAt: data.updatedAt
+      });
+    });
+    
+    return templates;
+  } catch (error) {
+    console.error('Error getting public templates:', error);
+    throw error;
+  }
+}
+
+// Like a public template
+export async function likeTemplate(templateId: string) {
+  try {
+    if (!auth.currentUser) {
+      throw new Error("User must be logged in to like templates");
+    }
+
+    const templateRef = doc(db, COLLECTION_NAME, templateId);
+    
+    // In a full implementation, you'd want to track which users liked which templates
+    // to prevent duplicate likes. For now, we'll just increment the count.
+    const templateDoc = await getDocs(query(collection(db, COLLECTION_NAME), where('__name__', '==', templateId)));
+    
+    if (!templateDoc.empty) {
+      const currentLikes = templateDoc.docs[0].data().likes || 0;
+      await updateDoc(templateRef, {
+        likes: currentLikes + 1,
+        updatedAt: serverTimestamp()
+      });
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error("Error liking template:", error);
+    throw error;
+  }
+}
+
+// Admin function: Feature a template
+export async function featureTemplate(templateId: string) {
+  try {
+    if (!auth.currentUser || auth.currentUser.email !== ADMIN_EMAIL) {
+      throw new Error("Only admins can feature templates");
+    }
+
+    const templateRef = doc(db, COLLECTION_NAME, templateId);
+    
+    await updateDoc(templateRef, {
+      featured: true,
+      updatedAt: serverTimestamp()
+    });
+    
+    return { success: true };
+  } catch (error) {
+    console.error("Error featuring template:", error);
+    throw error;
+  }
+}
+
+// Admin function: Unfeature a template
+export async function unfeatureTemplate(templateId: string) {
+  try {
+    if (!auth.currentUser || auth.currentUser.email !== ADMIN_EMAIL) {
+      throw new Error("Only admins can unfeature templates");
+    }
+
+    const templateRef = doc(db, COLLECTION_NAME, templateId);
+    
+    await updateDoc(templateRef, {
+      featured: false,
+      updatedAt: serverTimestamp()
+    });
+    
+    return { success: true };
+  } catch (error) {
+    console.error("Error unfeaturing template:", error);
+    throw error;
+  }
+}
+
+// Admin function: Remove a template from public view
+export async function removeTemplateFromPublic(templateId: string) {
+  try {
+    if (!auth.currentUser || auth.currentUser.email !== ADMIN_EMAIL) {
+      throw new Error("Only admins can remove public templates");
+    }
+
+    const templateRef = doc(db, COLLECTION_NAME, templateId);
+    
+    await updateDoc(templateRef, {
+      moderationStatus: 'removed',
+      isPublic: false,
+      updatedAt: serverTimestamp()
+    });
+    
+    return { success: true };
+  } catch (error) {
+    console.error("Error removing template:", error);
+    throw error;
+  }
+}
+
+// Check if current user is admin
+export function isAdmin(): boolean {
+  return auth.currentUser?.email === ADMIN_EMAIL;
 } 

@@ -2,10 +2,15 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow users to read and write their own data
+    // Templates collection - allow reading public templates, full access to own templates
     match /templates/{templateId} {
       allow create: if request.auth != null;
-      allow read, update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+      // Users can read their own templates OR public templates that are approved
+      allow read: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         (resource.data.isPublic == true && resource.data.moderationStatus == 'approved'));
+      // Users can only update/delete their own templates
+      allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
     }
     
     match /journalEntries/{entryId} {
