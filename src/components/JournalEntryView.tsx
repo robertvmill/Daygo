@@ -47,6 +47,13 @@ export function JournalEntryView() {
   const [editData, setEditData] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
 
+  // Helper function to clean up field labels - this removes underscores and capitalizes words
+  const cleanFieldLabel = (label: string): string => {
+    return label
+      .replace(/_/g, ' ') // Replace underscores with spaces
+      .replace(/\b\w/g, char => char.toUpperCase()); // Capitalize first letter of each word
+  };
+
   useEffect(() => {
     const fetchEntry = async () => {
       const id = params?.id;
@@ -210,7 +217,7 @@ export function JournalEntryView() {
         case 'text':
           return (
             <div className="mb-4">
-              <h3 className="text-base font-semibold mb-1">{field.label}</h3>
+              <h3 className="text-base font-semibold mb-1">{cleanFieldLabel(field.label)}</h3>
               <Input
                 value={editData[field.name] || ''}
                 onChange={e => handleEditField(field.name, e.target.value)}
@@ -220,7 +227,7 @@ export function JournalEntryView() {
         case 'textarea':
           return (
             <div className="mb-4">
-              <h3 className="text-base font-semibold mb-1">{field.label}</h3>
+              <h3 className="text-base font-semibold mb-1">{cleanFieldLabel(field.label)}</h3>
               <Textarea
                 value={editData[field.name] || ''}
                 onChange={e => handleEditField(field.name, e.target.value)}
@@ -230,7 +237,7 @@ export function JournalEntryView() {
         case 'boolean':
           return (
             <div className="mb-4">
-              <h3 className="text-base font-semibold mb-1">{field.label}</h3>
+              <h3 className="text-base font-semibold mb-1">{cleanFieldLabel(field.label)}</h3>
               <div className="flex gap-2">
                 <Button
                   type="button"
@@ -258,7 +265,7 @@ export function JournalEntryView() {
           if (!table) return null;
           return (
             <div className="mb-4">
-              <h3 className="text-base font-semibold mb-1">{field.label}</h3>
+              <h3 className="text-base font-semibold mb-1">{cleanFieldLabel(field.label)}</h3>
               <div className="border rounded-md overflow-x-auto">
                 <table className="w-full caption-bottom text-sm">
                   <thead className="[&_tr]:border-b">
@@ -304,7 +311,7 @@ export function JournalEntryView() {
       case 'textarea':
         return value ? (
           <div className="mb-4">
-            <h3 className="text-base font-semibold mb-1">{field.label}</h3>
+            <h3 className="text-base font-semibold mb-1">{cleanFieldLabel(field.label)}</h3>
             <div className="whitespace-pre-wrap">{value}</div>
           </div>
         ) : null;
@@ -312,7 +319,7 @@ export function JournalEntryView() {
       case 'boolean':
         return (
           <div className="mb-4">
-            <h3 className="text-base font-semibold mb-1">{field.label}</h3>
+            <h3 className="text-base font-semibold mb-1">{cleanFieldLabel(field.label)}</h3>
             <div>{value === 'true' ? '✓ Yes' : '✗ No'}</div>
           </div>
         );
@@ -320,7 +327,7 @@ export function JournalEntryView() {
       case 'mantra':
         return (
           <div className="mb-4">
-            <h3 className="text-base font-semibold mb-1">{field.label}</h3>
+            <h3 className="text-base font-semibold mb-1">{cleanFieldLabel(field.label)}</h3>
             <div className="p-4 border rounded-md bg-card shadow-sm">
               <p className="font-medium whitespace-pre-wrap">{field.placeholder || ""}</p>
             </div>
@@ -333,7 +340,7 @@ export function JournalEntryView() {
       case 'table':
         return field.tableData?.headers && field.tableData?.cells ? (
           <div className="mb-4">
-            <h3 className="text-base font-semibold mb-1">{field.label}</h3>
+            <h3 className="text-base font-semibold mb-1">{cleanFieldLabel(field.label)}</h3>
             <div className="border rounded-md overflow-x-auto">
               <table className="w-full caption-bottom text-sm">
                 <thead className="[&_tr]:border-b">
@@ -394,21 +401,22 @@ export function JournalEntryView() {
           ) : entry ? (
             <Card>
               <CardHeader>
+                {/* This is where the title is displayed */}
                 <CardTitle className="text-2xl">{entry.title}</CardTitle>
                 <CardDescription>
                   {formatDate(entry.createdAt)}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {template && template.fields && template.fields.length > 0 && (
+                {template && template.fields && template.fields.length > 0 ? (
                   <div className="mb-6">
                     {template.fields.map((field, index) => (
                       <div key={`field-${index}`}>{renderField(field)}</div>
                     ))}
-                    <div className="my-4 border-t border-border"></div>
                   </div>
+                ) : (
+                  <div className="whitespace-pre-wrap">{entry.content}</div>
                 )}
-                <div className="whitespace-pre-wrap">{entry.content}</div>
               </CardContent>
               <CardFooter className="flex justify-between">
                 <div className="flex gap-2">
