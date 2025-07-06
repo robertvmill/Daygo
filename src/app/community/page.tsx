@@ -118,7 +118,12 @@ export default function CommunityPage() {
         description: template.description,
         fields: template.fields
       });
-      toast.success("Template saved to your collection");
+      toast.success("Template added to your collection!");
+      
+      // Redirect to templates page after a short delay
+      setTimeout(() => {
+        router.push('/prompts');
+      }, 1500);
       
     } catch (error) {
       console.error("Error saving template:", error);
@@ -216,16 +221,16 @@ export default function CommunityPage() {
             <div>
               <h1 className="text-3xl font-bold">Community Templates</h1>
               <p className="text-muted-foreground mt-1">
-                Discover journal templates created by the community. Click &quot;Start Journaling&quot; to begin writing!
+                Discover journal templates created by the community. Click any template to see details, then add it to your collection!
               </p>
               <div className="flex items-center gap-4 mt-3">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <PenTool className="h-4 w-4" />
-                  <span>Click any template to start journaling instantly</span>
+                  <Eye className="h-4 w-4" />
+                  <span>Click any template to see all prompts</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Eye className="h-4 w-4" />
-                  <span>Preview prompts before you start</span>
+                  <Bookmark className="h-4 w-4" />
+                  <span>Add templates to use in your journal</span>
                 </div>
               </div>
             </div>
@@ -278,7 +283,6 @@ export default function CommunityPage() {
                   <TemplateCard 
                     key={template.id} 
                     template={template} 
-                    onUse={handleUseTemplate}
                     onSave={handleSaveTemplate}
                     onLike={handleLikeTemplate}
                     onFeature={handleFeatureTemplate}
@@ -286,6 +290,7 @@ export default function CommunityPage() {
                     isSaving={savingTemplateId === template.id}
                     isLiking={likingTemplateId === template.id}
                     isAdmin={userIsAdmin}
+                    router={router}
                   />
                 ))}
               </div>
@@ -308,7 +313,6 @@ export default function CommunityPage() {
                     <TemplateCard 
                       key={template.id} 
                       template={template} 
-                      onUse={handleUseTemplate}
                       onSave={handleSaveTemplate}
                       onLike={handleLikeTemplate}
                       onFeature={handleFeatureTemplate}
@@ -316,6 +320,7 @@ export default function CommunityPage() {
                       isSaving={savingTemplateId === template.id}
                       isLiking={likingTemplateId === template.id}
                       isAdmin={userIsAdmin}
+                      router={router}
                     />
                   ))}
                 </div>
@@ -336,7 +341,6 @@ export default function CommunityPage() {
 
 interface TemplateCardProps {
   template: JournalTemplate;
-  onUse: (id: string) => void;
   onSave: (id: string) => void;
   onLike: (id: string) => void;
   onFeature: (id: string, shouldFeature: boolean) => void;
@@ -344,18 +348,19 @@ interface TemplateCardProps {
   isSaving: boolean;
   isLiking: boolean;
   isAdmin: boolean;
+  router: ReturnType<typeof useRouter>;
 }
 
 function TemplateCard({ 
   template, 
-  onUse, 
   onSave, 
   onLike, 
   onFeature, 
   onRemove, 
   isSaving, 
   isLiking, 
-  isAdmin 
+  isAdmin,
+  router 
 }: TemplateCardProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
   
@@ -386,9 +391,7 @@ function TemplateCard({
     }
   };
 
-  const handleStartJournaling = () => {
-    onUse(template.id);
-  };
+
 
   const getFieldTypeDisplay = (fieldType: string) => {
     switch (fieldType) {
@@ -403,7 +406,10 @@ function TemplateCard({
   };
 
   return (
-    <Card className="overflow-hidden group hover:shadow-lg transition-all duration-300">
+    <Card 
+      className="overflow-hidden group hover:shadow-lg transition-all duration-300 cursor-pointer"
+      onClick={() => router.push(`/community/${template.id}`)}
+    >
       <CardHeader className="pb-4">
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-2">
@@ -479,8 +485,8 @@ function TemplateCard({
             {template.fields.slice(0, 2).map((field, idx) => (
               <div key={idx} className="flex items-start gap-2 text-sm">
                 <div className="h-1.5 w-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                <div className="flex-1">
-                  <p className="text-sm text-foreground font-medium truncate">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-foreground font-medium break-words">
                     {field.label || field.name}
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -555,15 +561,8 @@ function TemplateCard({
                   </ScrollArea>
                   
                   <div className="flex justify-end gap-2 pt-4 border-t">
-                    <Button variant="outline" onClick={() => setPreviewOpen(false)}>
+                    <Button onClick={() => setPreviewOpen(false)}>
                       Close Preview
-                    </Button>
-                    <Button onClick={() => {
-                      setPreviewOpen(false);
-                      handleStartJournaling();
-                    }}>
-                      <PenTool className="h-4 w-4 mr-2" />
-                      Start Journaling
                     </Button>
                   </div>
                 </DialogContent>
@@ -606,21 +605,25 @@ function TemplateCard({
             size="sm" 
             onClick={(e) => {
               e.stopPropagation();
-              onSave(template.id);
+              onLike(template.id);
             }}
-            disabled={isSaving}
+            disabled={isLiking}
             className="h-8"
           >
-            <Bookmark className="h-3 w-3 mr-1" />
-            {isSaving ? "..." : "Save"}
+            <Heart className="h-3 w-3 mr-1" />
+            {isLiking ? "..." : "Like"}
           </Button>
           <Button 
             size="sm" 
-            onClick={handleStartJournaling}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSave(template.id);
+            }}
+            disabled={isSaving}
             className="h-8 bg-primary hover:bg-primary/90"
           >
-            <PenTool className="h-3 w-3 mr-1" />
-            Start Journaling
+            <Bookmark className="h-3 w-3 mr-1" />
+            {isSaving ? "..." : "Add"}
           </Button>
         </div>
       </CardFooter>

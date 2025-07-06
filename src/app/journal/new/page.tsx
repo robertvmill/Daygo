@@ -113,9 +113,9 @@ export default function NewJournalEntryPage() {
               name: parsedTemplate.name,
               description: parsedTemplate.description,
               fields: parsedTemplate.fields.map((field: TemplateField) => ({
-                name: field.name,
-                type: field.type || 'text',
-                label: field.name,
+                            name: field.name,
+            type: field.type || 'text',
+            label: field.label || field.name,
                 placeholder: '',
                 required: false,
                 // Preserve tableData if present

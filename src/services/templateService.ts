@@ -4,6 +4,14 @@ import { collection, addDoc, doc, updateDoc, serverTimestamp, query, orderBy, ge
 import { db, auth } from "@/lib/firebase";
 import { JournalTemplate } from "@/types/journal";
 
+// Utility function to convert underscore field names back to human-readable labels
+const convertFieldNameToLabel = (fieldName: string): string => {
+  return fieldName
+    .replace(/_/g, ' ')              // Replace underscores with spaces
+    .replace(/\b\w/g, (match) => match.toUpperCase()) // Capitalize first letter of each word
+    .trim();
+};
+
 const COLLECTION_NAME = 'templates';
 const ADMIN_EMAIL = 'bertmill19@gmail.com'; // Admin email for moderation
 
@@ -134,9 +142,9 @@ export async function saveCommunityTemplate(template: {
         return {
           name: field.name,
           type: fieldType,
-          label: field.name, // Use the name as the label
-          placeholder: '',
-          required: false
+          label: field.label || convertFieldNameToLabel(field.name), // Use existing label or convert field name
+          placeholder: field.placeholder || '',
+          required: field.required || false
         };
       }),
       source: 'community',
