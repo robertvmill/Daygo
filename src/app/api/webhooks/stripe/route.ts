@@ -24,14 +24,15 @@ export async function POST(req: NextRequest) {
   log('info', 'Webhook POST request received');
   
   try {
-    // Get request body and signature
+    // Get raw request body and signature - critical for webhook verification
     const body = await req.text();
     const signature = req.headers.get('stripe-signature');
 
     log('info', 'Request details', {
       bodyLength: body.length,
       hasSignature: !!signature,
-      userAgent: req.headers.get('user-agent')
+      userAgent: req.headers.get('user-agent'),
+      webhookSecret: STRIPE_CONFIG.webhookSecret ? `${STRIPE_CONFIG.webhookSecret.substring(0, 10)}...` : 'missing'
     });
 
     if (!signature) {
@@ -133,3 +134,6 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+// Configure to receive raw body for webhook signature verification
+export const runtime = 'nodejs';
