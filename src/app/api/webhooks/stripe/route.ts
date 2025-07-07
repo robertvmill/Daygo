@@ -73,6 +73,14 @@ async function updateSubscriptionTierServer(userId: string, tier: 'free' | 'pro'
   }
 }
 
+// Handle GET requests for webhook verification
+export async function GET() {
+  return NextResponse.json(
+    { message: 'Stripe webhook endpoint is active', method: 'GET' },
+    { status: 200 }
+  );
+}
+
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
   
