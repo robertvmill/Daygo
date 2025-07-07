@@ -97,16 +97,28 @@ export async function POST(req: NextRequest) {
       // Update user subscription in Firestore
       try {
         const db = getFirestore();
-        await updateDoc(doc(db, 'subscriptions', userId), {
-          tier: subscription.status === 'active' ? tier : 'free',
+        const effectiveTier = subscription.status === 'active' ? tier : 'free';
+        
+        // Update both subscriptions collection and user document
+        const subscriptionUpdatePromise = updateDoc(doc(db, 'subscriptions', userId), {
+          tier: effectiveTier,
           stripeSubscriptionId: subscription.id,
           status: subscription.status,
           updatedAt: serverTimestamp(),
         });
 
-        log('info', 'Successfully updated Firestore subscription', {
+        const userUpdatePromise = updateDoc(doc(db, 'users', userId), {
+          subscriptionTier: effectiveTier,
+          stripeSubscriptionId: subscription.id,
+          subscriptionStatus: subscription.status,
+          updatedAt: serverTimestamp(),
+        });
+
+        await Promise.all([subscriptionUpdatePromise, userUpdatePromise]);
+
+        log('info', 'Successfully updated Firestore subscription and user', {
           userId: userId,
-          tier: subscription.status === 'active' ? tier : 'free',
+          tier: effectiveTier,
           subscriptionId: subscription.id
         });
       } catch (firestoreError) {

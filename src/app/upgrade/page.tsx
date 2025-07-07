@@ -69,41 +69,42 @@ export default function UpgradePage() {
       // Refresh subscription data after successful checkout with retry logic
       const refreshData = async () => {
         try {
-          let attempts = 0;
-          const maxAttempts = 10; // Try for up to 20 seconds
+          console.log('🔄 Syncing subscription with Stripe...');
           
-          while (attempts < maxAttempts) {
-            console.log(`Refreshing subscription data (attempt ${attempts + 1}/${maxAttempts})...`);
+          // First sync with Stripe
+          const auth = getAuth();
+          const user = auth.currentUser;
+          
+          if (user) {
+            const token = await user.getIdToken();
+            const syncResponse = await fetch('/api/sync-subscription', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+              },
+            });
             
-            const [subscriptionData, usageData] = await Promise.all([
-              getUserSubscription(),
-              getUserUsage()
-            ]);
-            
-            // Check if subscription tier has been updated
-            if (subscriptionData?.tier === 'pro' || subscriptionData?.tier === 'team') {
-              console.log('✅ Subscription tier updated successfully:', subscriptionData.tier);
-              setSubscription(subscriptionData);
-              setUsage(usageData);
-              toast.success('🎉 Your Pro subscription is now active!');
-              break;
-            }
-            
-            attempts++;
-            if (attempts < maxAttempts) {
-              // Wait 2 seconds before next attempt
-              await new Promise(resolve => setTimeout(resolve, 2000));
+            if (syncResponse.ok) {
+              const syncData = await syncResponse.json();
+              console.log('✅ Subscription synced:', syncData);
+              toast.success(`🎉 Welcome to ${syncData.tier.charAt(0).toUpperCase() + syncData.tier.slice(1)}! Your subscription has been activated.`);
             } else {
-              // Final attempt failed, still update the UI
-              console.warn('Subscription tier not updated after max attempts, showing current data');
-              setSubscription(subscriptionData);
-              setUsage(usageData);
-              toast.warning('Subscription may still be processing. Please refresh the page if you don\'t see Pro features.');
+              console.warn('⚠️ Sync failed, fetching current data anyway');
             }
           }
+          
+          // Then refresh the UI data
+          const [subscriptionData, usageData] = await Promise.all([
+            getUserSubscription(),
+            getUserUsage()
+          ]);
+          
+          setSubscription(subscriptionData);
+          setUsage(usageData);
+          
         } catch (error) {
-          console.error('Error refreshing subscription data:', error);
-          toast.error('Failed to refresh subscription status. Please refresh the page.');
+          console.error('Error syncing subscription:', error);
+          toast.error('Failed to sync subscription. Please try the refresh button.');
         }
       };
       

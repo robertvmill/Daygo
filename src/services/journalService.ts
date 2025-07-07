@@ -17,6 +17,13 @@ import {
 } from "firebase/firestore";
 import { JournalEntry } from "@/types/journal";
 import { toast } from "sonner";
+import { 
+  encryptSensitiveData, 
+  decryptSensitiveData, 
+  encryptObjectFields, 
+  decryptObjectFields,
+  isEncryptionSupported 
+} from "@/lib/encryption";
 
 // Collection references - ensure we use the same collection name consistently
 // The app is using "journalEntries" in some places and "journal" in others
@@ -56,7 +63,7 @@ export const addJournalEntry = async (journalData: JournalEntryInput) => {
     console.log("Current user:", user.uid);
     
     // Create journal entry with required user data and remove undefined fields
-    const entryData: Record<string, any> = {
+    let entryData: Record<string, any> = {
       title: journalData.title,
       content: journalData.content,
       userId: user.uid,
@@ -68,12 +75,39 @@ export const addJournalEntry = async (journalData: JournalEntryInput) => {
       entryData.templateId = journalData.templateId;
     }
     
-    // Add templateFields if they exist
+    // Add templateFields if they exist (and encrypt them too)
     if (journalData.templateFields) {
       entryData.templateFields = journalData.templateFields;
     }
     
-    console.log("Entry data to save:", entryData);
+    // Encrypt sensitive fields before saving to Firebase
+    // This ensures that even if someone gains access to your Firebase, they can't read the journal content
+    if (isEncryptionSupported()) {
+      console.log("Encrypting sensitive fields before saving to Firebase...");
+      
+      // Encrypt the most sensitive fields: title and content
+      entryData = await encryptObjectFields(entryData, ['title', 'content'], user.uid);
+      
+      // Also encrypt template fields if they contain personal information
+      if (entryData.templateFields) {
+        const encryptedTemplateFields: Record<string, any> = {};
+        for (const [key, value] of Object.entries(entryData.templateFields)) {
+          if (value && typeof value === 'string') {
+            encryptedTemplateFields[key] = await encryptSensitiveData(value, user.uid);
+            encryptedTemplateFields[`${key}_encrypted`] = true;
+          } else {
+            encryptedTemplateFields[key] = value;
+          }
+        }
+        entryData.templateFields = encryptedTemplateFields;
+      }
+      
+      console.log("Sensitive fields encrypted successfully");
+    } else {
+      console.warn("Encryption not supported in this browser - data will be stored unencrypted");
+    }
+    
+    console.log("Entry data to save (sensitive fields now encrypted):", entryData);
     
     const docRef = await addDoc(journalCollection(), entryData);
     console.log("Journal entry added with ID:", docRef.id);
@@ -179,11 +213,50 @@ export const getJournalEntry = async (id: string): Promise<JournalEntry> => {
     throw new Error("Journal entry not found");
   }
   
-  const data = docSnap.data() as JournalEntry;
+  let data = docSnap.data() as JournalEntry;
   
   // Ensure users can only access their own journal entries
   if (data.userId !== user.uid) {
     throw new Error("Unauthorized access to journal entry");
+  }
+  
+  // Decrypt sensitive fields after reading from Firebase
+  // This converts the encrypted data back to readable text
+  if (isEncryptionSupported()) {
+    try {
+      console.log("Decrypting sensitive fields from Firebase...");
+      
+      // Decrypt the main fields (title and content)
+      data = await decryptObjectFields(data, ['title', 'content'], user.uid);
+      
+      // Decrypt template fields if they were encrypted
+      if (data.templateFields) {
+        const decryptedTemplateFields: Record<string, any> = {};
+        for (const [key, value] of Object.entries(data.templateFields)) {
+          // Check if this field was encrypted
+          if (data.templateFields[`${key}_encrypted`] === true && typeof value === 'string') {
+            try {
+              decryptedTemplateFields[key] = await decryptSensitiveData(value, user.uid);
+            } catch (decryptError) {
+              console.error(`Failed to decrypt template field ${key}:`, decryptError);
+              // Keep the encrypted value rather than losing data
+              decryptedTemplateFields[key] = value;
+            }
+          } else if (!key.endsWith('_encrypted')) {
+            // Keep non-encrypted fields as they are
+            decryptedTemplateFields[key] = value;
+          }
+          // Skip the '_encrypted' marker fields
+        }
+        data.templateFields = decryptedTemplateFields;
+      }
+      
+      console.log("Sensitive fields decrypted successfully");
+    } catch (decryptError) {
+      console.error("Failed to decrypt journal entry:", decryptError);
+      // In case of decryption failure, return the data as-is rather than failing completely
+      // This ensures the app doesn't break if there are encryption issues
+    }
   }
   
   return {
@@ -205,12 +278,48 @@ export const getJournalEntries = async (): Promise<JournalEntry[]> => {
   const querySnapshot = await getDocs(q);
   const entries: JournalEntry[] = [];
   
-  querySnapshot.forEach((doc) => {
+  // Process each document and decrypt sensitive fields
+  for (const docSnap of querySnapshot.docs) {
+    let data = docSnap.data() as JournalEntry;
+    
+    // Decrypt sensitive fields for each entry
+    if (isEncryptionSupported()) {
+      try {
+        // Decrypt the main fields (title and content)
+        data = await decryptObjectFields(data, ['title', 'content'], user.uid);
+        
+        // Decrypt template fields if they were encrypted
+        if (data.templateFields) {
+          const decryptedTemplateFields: Record<string, any> = {};
+          for (const [key, value] of Object.entries(data.templateFields)) {
+            // Check if this field was encrypted
+            if (data.templateFields[`${key}_encrypted`] === true && typeof value === 'string') {
+              try {
+                decryptedTemplateFields[key] = await decryptSensitiveData(value, user.uid);
+              } catch (decryptError) {
+                console.error(`Failed to decrypt template field ${key} for entry ${docSnap.id}:`, decryptError);
+                // Keep the encrypted value rather than losing data
+                decryptedTemplateFields[key] = value;
+              }
+            } else if (!key.endsWith('_encrypted')) {
+              // Keep non-encrypted fields as they are
+              decryptedTemplateFields[key] = value;
+            }
+            // Skip the '_encrypted' marker fields
+          }
+          data.templateFields = decryptedTemplateFields;
+        }
+      } catch (decryptError) {
+        console.error(`Failed to decrypt journal entry ${docSnap.id}:`, decryptError);
+        // In case of decryption failure, keep the data as-is rather than failing completely
+      }
+    }
+    
     entries.push({
-      ...doc.data(),
-      id: doc.id
+      ...data,
+      id: docSnap.id
     } as JournalEntry);
-  });
+  }
   
   return entries;
 };
@@ -241,12 +350,48 @@ export const getJournalEntriesByTemplate = async (templateId: string | null): Pr
   const querySnapshot = await getDocs(q);
   const entries: JournalEntry[] = [];
   
-  querySnapshot.forEach((doc) => {
+  // Process each document and decrypt sensitive fields
+  for (const docSnap of querySnapshot.docs) {
+    let data = docSnap.data() as JournalEntry;
+    
+    // Decrypt sensitive fields for each entry
+    if (isEncryptionSupported()) {
+      try {
+        // Decrypt the main fields (title and content)
+        data = await decryptObjectFields(data, ['title', 'content'], user.uid);
+        
+        // Decrypt template fields if they were encrypted
+        if (data.templateFields) {
+          const decryptedTemplateFields: Record<string, any> = {};
+          for (const [key, value] of Object.entries(data.templateFields)) {
+            // Check if this field was encrypted
+            if (data.templateFields[`${key}_encrypted`] === true && typeof value === 'string') {
+              try {
+                decryptedTemplateFields[key] = await decryptSensitiveData(value, user.uid);
+              } catch (decryptError) {
+                console.error(`Failed to decrypt template field ${key} for entry ${docSnap.id}:`, decryptError);
+                // Keep the encrypted value rather than losing data
+                decryptedTemplateFields[key] = value;
+              }
+            } else if (!key.endsWith('_encrypted')) {
+              // Keep non-encrypted fields as they are
+              decryptedTemplateFields[key] = value;
+            }
+            // Skip the '_encrypted' marker fields
+          }
+          data.templateFields = decryptedTemplateFields;
+        }
+      } catch (decryptError) {
+        console.error(`Failed to decrypt journal entry ${docSnap.id}:`, decryptError);
+        // In case of decryption failure, keep the data as-is rather than failing completely
+      }
+    }
+    
     entries.push({
-      ...doc.data(),
-      id: doc.id
+      ...data,
+      id: docSnap.id
     } as JournalEntry);
-  });
+  }
   
   return entries;
 };
@@ -312,10 +457,41 @@ export const updateJournalEntry = async (id: string, updates: Partial<JournalEnt
     throw new Error("Unauthorized access to journal entry");
   }
   
+  // Encrypt any updated sensitive fields before saving
+  let encryptedUpdates: Record<string, any> = { ...updates };
+  
+  if (isEncryptionSupported()) {
+    console.log("Encrypting updated sensitive fields before saving to Firebase...");
+    
+    // Encrypt title and content if they're being updated
+    const fieldsToEncrypt = ['title', 'content'].filter(field => updates[field as keyof JournalEntryInput] !== undefined);
+    if (fieldsToEncrypt.length > 0) {
+      encryptedUpdates = await encryptObjectFields(encryptedUpdates, fieldsToEncrypt, user.uid);
+    }
+    
+    // Encrypt template fields if they're being updated
+    if (updates.templateFields) {
+      const encryptedTemplateFields: Record<string, any> = {};
+      for (const [key, value] of Object.entries(updates.templateFields)) {
+        if (value && typeof value === 'string') {
+          encryptedTemplateFields[key] = await encryptSensitiveData(value, user.uid);
+          encryptedTemplateFields[`${key}_encrypted`] = true;
+        } else {
+          encryptedTemplateFields[key] = value;
+        }
+      }
+      encryptedUpdates.templateFields = encryptedTemplateFields;
+    }
+    
+    console.log("Updated sensitive fields encrypted successfully");
+  } else {
+    console.warn("Encryption not supported in this browser - updates will be stored unencrypted");
+  }
+  
   // Update the journal entry
   const docRef = doc(db, "journalEntries", id);
   await updateDoc(docRef, {
-    ...updates,
+    ...encryptedUpdates,
     updatedAt: serverTimestamp()
   });
   
