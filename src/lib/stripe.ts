@@ -59,11 +59,18 @@ export const validateStripeConfig = () => {
     'NEXT_PUBLIC_APP_URL',
   ];
   
+  console.log('🔍 Checking environment variables:', required.map(key => ({ 
+    key, 
+    exists: !!process.env[key],
+    value: process.env[key] ? `${process.env[key].substring(0, 10)}...` : 'undefined'
+  })));
+  
   const missing = required.filter(key => !process.env[key]);
   
   if (missing.length > 0) {
     console.error('🚨 STRIPE CONFIGURATION ERROR 🚨');
     console.error('Missing required environment variables:', missing);
+    console.error('Available env vars:', Object.keys(process.env).filter(key => key.includes('STRIPE')));
     console.error('Please check your .env file and ensure all Stripe variables are set.');
     throw new Error(`Missing required Stripe environment variables: ${missing.join(', ')}`);
   }
