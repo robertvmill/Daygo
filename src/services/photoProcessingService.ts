@@ -38,6 +38,79 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 /**
+ * Compress an image file to reduce its size while maintaining quality
+ * This function helps prevent 413 "Request Too Large" errors
+ */
+function compressImageFile(file: File, maxSizeBytes: number = 4 * 1024 * 1024): Promise<File> {
+  return new Promise((resolve, reject) => {
+    // If file is already small enough, return it as-is
+    if (file.size <= maxSizeBytes) {
+      resolve(file);
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+
+    img.onload = () => {
+      // Calculate new dimensions to reduce file size
+      let { width, height } = img;
+      const maxDimension = 2048; // Maximum dimension for good OCR results
+      
+      // Scale down if image is too large
+      if (width > maxDimension || height > maxDimension) {
+        const ratio = Math.min(maxDimension / width, maxDimension / height);
+        width = Math.floor(width * ratio);
+        height = Math.floor(height * ratio);
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      
+      // Draw the image with new dimensions
+      ctx?.drawImage(img, 0, 0, width, height);
+      
+      // Convert to blob with compression
+      // Start with good quality and reduce until size is acceptable
+      let quality = 0.8;
+      
+      const tryCompress = () => {
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error('Failed to compress image'));
+              return;
+            }
+            
+            // Check if compressed size is acceptable
+            if (blob.size <= maxSizeBytes || quality <= 0.1) {
+              // Create a new File object with the compressed data
+              const compressedFile = new File([blob], file.name, {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              resolve(compressedFile);
+            } else {
+              // Reduce quality and try again
+              quality -= 0.1;
+              tryCompress();
+            }
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+      
+      tryCompress();
+    };
+    
+    img.onerror = () => reject(new Error('Failed to load image for compression'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+/**
  * Extract text from photo using OCR (no Firebase Storage needed)
  * We'll use Google Vision API through a Next.js API route with base64 data
  */
@@ -45,8 +118,21 @@ export async function extractTextFromPhoto(file: File): Promise<{ text: string; 
   try {
     console.log('Extracting text from photo...');
     
+    // Compress the image if it's too large to prevent 413 errors
+    let processedFile = file;
+    if (file.size > 4 * 1024 * 1024) { // 4MB threshold
+      console.log('Image is large, compressing...');
+      try {
+        processedFile = await compressImageFile(file);
+        console.log(`Compressed image from ${(file.size / 1024 / 1024).toFixed(1)}MB to ${(processedFile.size / 1024 / 1024).toFixed(1)}MB`);
+      } catch (compressionError) {
+        console.warn('Failed to compress image, proceeding with original:', compressionError);
+        // Continue with original file if compression fails
+      }
+    }
+    
     // Convert file to base64
-    const base64Data = await fileToBase64(file);
+    const base64Data = await fileToBase64(processedFile);
     
     const response = await fetch('/api/vision/extract-text', {
       method: 'POST',
@@ -57,7 +143,13 @@ export async function extractTextFromPhoto(file: File): Promise<{ text: string; 
     });
 
     if (!response.ok) {
-      throw new Error('OCR processing failed');
+      // Handle specific error responses from the API
+      if (response.status === 413) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Image too large for processing');
+      }
+      
+      throw new Error(`OCR processing failed (${response.status})`);
     }
 
     const result = await response.json();
@@ -69,6 +161,23 @@ export async function extractTextFromPhoto(file: File): Promise<{ text: string; 
     };
   } catch (error) {
     console.error('Error extracting text:', error);
+    
+    // Provide specific error messages for different types of failures
+    if (error instanceof Error) {
+      if (error.message.includes('too large')) {
+        return {
+          text: '[Image too large for processing - Please compress the image and try again]',
+          confidence: 0,
+        };
+      }
+      
+      if (error.message.includes('413')) {
+        return {
+          text: '[Image size exceeds limit - Please reduce image size and try again]',
+          confidence: 0,
+        };
+      }
+    }
     
     // Fallback: return placeholder text if OCR fails
     return {
@@ -115,24 +224,23 @@ export function validatePhotoFile(file: File): { isValid: boolean; error?: strin
     return { isValid: false, error: 'File must be an image' };
   }
   
-  // Check file size (25MB limit)
+  // Check file size (5MB limit for reliable processing)
   // 
-  // TECHNICAL NOTE: This validation allows up to 25MB image files.
-  // However, there are important platform constraints to be aware of:
+  // TECHNICAL NOTE: This validation limits images to 5MB for reliable processing.
+  // Here are the technical constraints:
   // 
-  // 1. Vercel Functions have a 4.5MB request body limit
-  // 2. Images are converted to base64 encoding (+33% size increase) 
-  // 3. Effective limit on Vercel is ~3.4MB original file size
-  // 4. Google Vision API supports up to 20MB files, but has 10MB JSON request limit
+  // 1. Base64 encoding increases file size by ~33%
+  // 2. Server has 10MB limit for request bodies
+  // 3. OpenAI Vision API works best with reasonably sized images
+  // 4. Larger images may timeout or fail during processing
   // 
-  // Users may still encounter errors with large files due to these platform limitations.
-  // For files larger than ~3-4MB, consider implementing:
-  // - Direct cloud storage uploads with pre-signed URLs
-  // - Client-side image compression before upload
-  // - Chunked/streaming upload mechanisms
-  const maxSize = 25 * 1024 * 1024; // 25MB - increased from 10MB per user request
+  // For optimal results:
+  // - Keep images under 5MB original size
+  // - Use JPEG format for photos (better compression)
+  // - Consider reducing image dimensions for very large photos
+  const maxSize = 5 * 1024 * 1024; // 5MB - realistic limit for reliable processing
   if (file.size > maxSize) {
-    return { isValid: false, error: 'Image must be smaller than 25MB' };
+    return { isValid: false, error: 'Image must be smaller than 5MB for reliable processing. Please compress the image or reduce its dimensions.' };
   }
   
   // Check for supported formats
