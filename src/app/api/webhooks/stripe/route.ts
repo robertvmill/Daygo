@@ -73,9 +73,36 @@ export async function POST(req: NextRequest) {
         metadata: subscription.metadata
       });
 
-      // Extract user info from metadata
-      const userId = subscription.metadata.userId;
-      const tier = subscription.metadata.tier as 'pro' | 'team';
+      // Extract user info from metadata - check both subscription and checkout session metadata
+      let userId = subscription.metadata.userId;
+      let tier = subscription.metadata.tier as 'pro' | 'team';
+      
+      // If not found in subscription metadata, try to get from checkout session
+      if (!userId && event.type === 'customer.subscription.created') {
+        log('info', 'Checking for checkout session metadata since subscription metadata is empty');
+        try {
+          const stripe = getStripeServer();
+          const checkoutSessions = await stripe.checkout.sessions.list({
+            subscription: subscription.id,
+            limit: 1
+          });
+          
+          if (checkoutSessions.data.length > 0) {
+            const session = checkoutSessions.data[0];
+            userId = session.metadata?.userId;
+            tier = session.metadata?.tier as 'pro' | 'team';
+            log('info', 'Found metadata in checkout session', {
+              userId,
+              tier,
+              sessionId: session.id
+            });
+          }
+        } catch (sessionError) {
+          log('error', 'Failed to retrieve checkout session', {
+            error: sessionError instanceof Error ? sessionError.message : 'Unknown error'
+          });
+        }
+      }
 
       if (!userId) {
         log('warn', 'No userId in subscription metadata', { 

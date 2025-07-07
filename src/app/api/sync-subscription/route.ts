@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { initAdmin } from '@/lib/firebase-admin';
 import { getStripeServer } from '@/lib/stripe';
 
@@ -98,14 +98,14 @@ async function updateUserSubscription(
     tier,
     stripeSubscriptionId: subscriptionId,
     status,
-    updatedAt: db.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
   const userUpdatePromise = db.collection('users').doc(userId).set({
     subscriptionTier: tier,
     stripeSubscriptionId: subscriptionId,
     subscriptionStatus: status,
-    updatedAt: db.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
   await Promise.all([subscriptionUpdatePromise, userUpdatePromise]);
