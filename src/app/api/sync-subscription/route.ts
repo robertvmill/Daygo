@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore, doc, updateDoc, serverTimestamp } from 'firebase-admin/firestore';
+import { getFirestore, doc, updateDoc, setDoc, serverTimestamp } from 'firebase-admin/firestore';
 import { initAdmin } from '@/lib/firebase-admin';
 import { getStripeServer } from '@/lib/stripe';
 
@@ -93,19 +93,20 @@ async function updateUserSubscription(
 ) {
   const db = getFirestore();
   
-  const subscriptionUpdatePromise = updateDoc(doc(db, 'subscriptions', userId), {
+  // Use setDoc with merge to create documents if they don't exist
+  const subscriptionUpdatePromise = setDoc(doc(db, 'subscriptions', userId), {
     tier,
     stripeSubscriptionId: subscriptionId,
     status,
     updatedAt: serverTimestamp(),
-  });
+  }, { merge: true });
 
-  const userUpdatePromise = updateDoc(doc(db, 'users', userId), {
+  const userUpdatePromise = setDoc(doc(db, 'users', userId), {
     subscriptionTier: tier,
     stripeSubscriptionId: subscriptionId,
     subscriptionStatus: status,
     updatedAt: serverTimestamp(),
-  });
+  }, { merge: true });
 
   await Promise.all([subscriptionUpdatePromise, userUpdatePromise]);
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStripeServer, STRIPE_CONFIG } from '@/lib/stripe';
 import Stripe from 'stripe';
-import { getFirestore, doc, updateDoc, serverTimestamp } from 'firebase-admin/firestore';
+import { getFirestore, doc, updateDoc, setDoc, serverTimestamp } from 'firebase-admin/firestore';
 import { initAdmin } from '@/lib/firebase-admin';
 
 // Initialize Firebase Admin
@@ -100,19 +100,19 @@ export async function POST(req: NextRequest) {
         const effectiveTier = subscription.status === 'active' ? tier : 'free';
         
         // Update both subscriptions collection and user document
-        const subscriptionUpdatePromise = updateDoc(doc(db, 'subscriptions', userId), {
+        const subscriptionUpdatePromise = setDoc(doc(db, 'subscriptions', userId), {
           tier: effectiveTier,
           stripeSubscriptionId: subscription.id,
           status: subscription.status,
           updatedAt: serverTimestamp(),
-        });
+        }, { merge: true });
 
-        const userUpdatePromise = updateDoc(doc(db, 'users', userId), {
+        const userUpdatePromise = setDoc(doc(db, 'users', userId), {
           subscriptionTier: effectiveTier,
           stripeSubscriptionId: subscription.id,
           subscriptionStatus: subscription.status,
           updatedAt: serverTimestamp(),
-        });
+        }, { merge: true });
 
         await Promise.all([subscriptionUpdatePromise, userUpdatePromise]);
 

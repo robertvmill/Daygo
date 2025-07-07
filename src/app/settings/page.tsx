@@ -16,7 +16,8 @@ import {
   Bell, 
   User, 
   ChevronRight,
-  CloudUpload
+  CloudUpload,
+  Shield
 } from "lucide-react";
 import Link from 'next/link';
 
@@ -51,6 +52,13 @@ export default function SettingsPage() {
       href: '/settings/account'
     },
     {
+      title: 'Data Encryption',
+      description: 'View and manage your data encryption settings',
+      icon: <Shield className="h-5 w-5" />,
+      href: '/settings/encryption',
+      highlight: true
+    },
+    {
       title: 'API Keys',
       description: 'Manage API keys for external services',
       icon: <Key className="h-5 w-5" />,
@@ -66,8 +74,7 @@ export default function SettingsPage() {
       title: 'Pinecone Index',
       description: 'Manage your journal entry vector database',
       icon: <Database className="h-5 w-5" />,
-      href: '/settings/pinecone-index',
-      highlight: true
+      href: '/settings/pinecone-index'
     },
     {
       title: 'Data Backup',
