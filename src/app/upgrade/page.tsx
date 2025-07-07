@@ -10,8 +10,6 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbL
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { UsageLimitBanner } from "@/components/UsageLimitBanner";
-import { DebugSubscription } from "@/components/DebugSubscription";
-import { SubscriptionDebug } from "@/components/SubscriptionDebug";
 import { PRICING, SUBSCRIPTION_TIERS } from "@/types/subscription";
 import { getUserSubscription, getUserUsage } from "@/services/subscriptionService";
 import type { UserSubscription, UsageStats } from "@/types/subscription";
@@ -101,6 +99,11 @@ export default function UpgradePage() {
           
           setSubscription(subscriptionData);
           setUsage(usageData);
+          
+          // Auto-refresh the page to ensure UI is fully updated
+          setTimeout(() => {
+            window.location.reload();
+          }, 2000);
           
         } catch (error) {
           console.error('Error syncing subscription:', error);
@@ -450,11 +453,6 @@ export default function UpgradePage() {
             </div>
           </div>
 
-          {/* Debug Section - Development Only */}
-          <div className="pt-8 border-t space-y-6">
-            <SubscriptionDebug />
-            <DebugSubscription />
-          </div>
         </main>
       </SidebarInset>
     </SidebarProvider>
