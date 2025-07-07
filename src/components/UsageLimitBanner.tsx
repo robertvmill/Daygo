@@ -98,9 +98,21 @@ export function UsageLimitBanner({
   const isApproachingTemplateLimit = templatePercentage >= 40;
   const isAtAnyLimit = journalPercentage >= 100 || templatePercentage >= 100;
 
-  // Don't show banner for pro/team users unless they want detailed view
+  // Show Pro/Team success banner in compact mode
   if (subscription.tier !== 'free' && type === 'compact') {
-    return null;
+    return (
+      <Alert className={`${className} border-green-500 bg-green-50 dark:bg-green-950`}>
+        <Sparkles className="h-4 w-4 text-green-600" />
+        <AlertDescription className="flex items-center justify-between w-full">
+          <div className="text-green-800 dark:text-green-200">
+            <span className="font-medium">
+              🎉 {subscription.tier.charAt(0).toUpperCase() + subscription.tier.slice(1)} plan active!
+            </span>
+            <span className="ml-2">Unlimited journaling & all premium features unlocked</span>
+          </div>
+        </AlertDescription>
+      </Alert>
+    );
   }
 
   if (type === 'compact') {
