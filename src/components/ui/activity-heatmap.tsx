@@ -15,7 +15,7 @@ interface ActivityHeatmapProps {
   weeks?: number;
 }
 
-export function ActivityHeatmap({ data, className, weeks = 26 }: ActivityHeatmapProps) {
+export function ActivityHeatmap({ data, className, weeks = 12 }: ActivityHeatmapProps) {
   const today = new Date();
   const startDate = startOfWeek(subDays(today, weeks * 7 - 1), { weekStartsOn: 0 });
   
@@ -78,36 +78,38 @@ export function ActivityHeatmap({ data, className, weeks = 26 }: ActivityHeatmap
       <CardContent>
         <div className="space-y-4">
           <div className="relative overflow-x-auto">
-            <div className="flex gap-1" style={{ minWidth: `${weeks * 16}px` }}>
-              <div className="flex flex-col gap-1 mr-2">
-                <div className="h-3 text-xs text-muted-foreground flex items-center">Sun</div>
-                <div className="h-3"></div>
-                <div className="h-3 text-xs text-muted-foreground flex items-center">Tue</div>
-                <div className="h-3"></div>
-                <div className="h-3 text-xs text-muted-foreground flex items-center">Thu</div>
-                <div className="h-3"></div>
-                <div className="h-3 text-xs text-muted-foreground flex items-center">Sat</div>
+            <div className="flex gap-1">
+              <div className="flex flex-col gap-1 mr-3 min-w-[30px]">
+                <div className="h-4 text-xs text-muted-foreground flex items-center">Sun</div>
+                <div className="h-4"></div>
+                <div className="h-4 text-xs text-muted-foreground flex items-center">Tue</div>
+                <div className="h-4"></div>
+                <div className="h-4 text-xs text-muted-foreground flex items-center">Thu</div>
+                <div className="h-4"></div>
+                <div className="h-4 text-xs text-muted-foreground flex items-center">Sat</div>
               </div>
               
-              {Array.from({ length: weeks }).map((_, weekIndex) => (
-                <div key={weekIndex} className="flex flex-col gap-1">
-                  {grid.map((row, dayIndex) => {
-                    const day = row[weekIndex];
-                    return (
-                      <div key={dayIndex} className="w-3 h-3">
-                        {day ? (
-                          <div
-                            className={`w-full h-full rounded-sm transition-all duration-200 hover:ring-2 hover:ring-gray-400 cursor-pointer ${day.intensity}`}
-                            title={`${format(day.date, 'MMM d, yyyy')}: ${day.words} words`}
-                          />
-                        ) : (
-                          <div className="w-full h-full" />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
+              <div className="flex gap-1 flex-1">
+                {Array.from({ length: weeks }).map((_, weekIndex) => (
+                  <div key={weekIndex} className="flex flex-col gap-1 flex-1 min-w-[12px]">
+                    {grid.map((row, dayIndex) => {
+                      const day = row[weekIndex];
+                      return (
+                        <div key={dayIndex} className="w-full h-4">
+                          {day ? (
+                            <div
+                              className={`w-full h-full rounded-sm transition-all duration-200 hover:ring-2 hover:ring-gray-400 cursor-pointer ${day.intensity}`}
+                              title={`${format(day.date, 'MMM d, yyyy')}: ${day.words} words`}
+                            />
+                          ) : (
+                            <div className="w-full h-full" />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
           

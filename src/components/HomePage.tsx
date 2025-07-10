@@ -73,8 +73,8 @@ export function HomePage() {
         const stats = await calculateJournalStats()
         setJournalStats(stats)
         
-        // Get daily word counts for the last 6 months (approximately 180 days)
-        const dailyData = await getDailyWordCounts(180)
+        // Get daily word counts for the last 12 weeks (84 days)
+        const dailyData = await getDailyWordCounts(84)
         setDailyWordData(dailyData)
         
         // Get goal progress if there are any words written
