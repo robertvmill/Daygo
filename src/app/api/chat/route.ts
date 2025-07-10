@@ -99,6 +99,22 @@ export async function POST(req: Request) {
     const result = streamText({
       model: openai('gpt-4o'),
       messages: cleanMessages,
+      experimental_transform: (chunk) => {
+        // Filter out debug messages from the stream
+        if (chunk.type === 'text-delta' && chunk.textDelta) {
+          // Remove step-start and other debug JSON objects
+          const cleanText = chunk.textDelta
+            .replace(/\{"type":"step-start"\}/g, '')
+            .replace(/\{"type":"[^"]*"\}/g, '')
+            .replace(/^\s*\{"[^"]*":\s*"[^"]*"\}\s*$/gm, '');
+          
+          return {
+            ...chunk,
+            textDelta: cleanText
+          };
+        }
+        return chunk;
+      },
       tools: {
         weather: tool({
           description: 'Get the weather in a location (fahrenheit)',

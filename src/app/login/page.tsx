@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { signInWithEmail, signInWithGoogle } from "@/lib/authUtils";
 import { FirebaseError } from 'firebase/app';
 import { motion } from "framer-motion";
-import { Calendar, CheckCircle, Clock, Sparkles } from "lucide-react";
+import { Calendar, CheckCircle, Clock, Eye, EyeOff, Sparkles } from "lucide-react";
 import { DayGoLogo } from '@/components/DayGoLogo';
 
 // Main login page component
@@ -23,6 +23,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const router = useRouter();
 
   // Handle email/password sign in
@@ -85,8 +87,13 @@ export default function LoginPage() {
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       {/* Navigation */}
-      {/* Designer: Fixed navigation bar with blur effect and border bottom */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-background/90 backdrop-blur-sm border-b border-border">
+      {/* Designer: Fixed navigation bar with enhanced blur effect and smooth entrance animation */}
+      <motion.nav 
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border"
+      >
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center">
             <Link href="/" className="flex items-center">
@@ -94,56 +101,62 @@ export default function LoginPage() {
             </Link>
           </div>
           <div className="flex items-center gap-6">
-            <Link href="/login" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <Link href="/login" className="text-sm font-medium text-primary hover:text-primary/90 transition-colors">
               Log in
             </Link>
-            <Button asChild size="sm" className="rounded-full px-4">
+            <Button asChild size="sm" className="rounded-full px-4 shadow-sm">
               <Link href="/register">Sign up</Link>
             </Button>
           </div>
         </div>
-      </nav>
+      </motion.nav>
 
       <div className="flex flex-1 flex-col">
         {/* Main content - Login form first */}
-        {/* Designer: Clean login form with email/password and Google sign in options */}
-        <div className="w-full pt-24 pb-16 px-6 md:px-12 flex items-center justify-center bg-background">
+        {/* Designer: Enhanced login form with improved styling and password visibility toggle */}
+        <div className="w-full pt-28 pb-16 px-6 md:px-12 flex items-center justify-center bg-background">
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
             className="w-full max-w-md space-y-8"
           >
             <div className="text-center">
-              <h2 className="mt-6 text-3xl font-bold tracking-tight">Welcome back</h2>
+              <h2 className="mt-6 text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/80">
+                Welcome back
+              </h2>
               <p className="mt-2 text-sm text-muted-foreground">
                 Don&apos;t have an account yet?{" "}
-                <Link href="/register" className="font-medium text-primary hover:text-primary/90">
+                <Link href="/register" className="font-medium text-primary hover:text-primary/90 transition-colors">
                   Sign up now
                 </Link>
               </p>
             </div>
             
             {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-md bg-destructive/10 p-4 text-sm text-destructive border border-destructive/20"
+              >
                 {error}
-              </div>
+              </motion.div>
             )}
             
             <form className="mt-8 space-y-6" onSubmit={handleEmailSignIn}>
-              <div className="space-y-4 rounded-md shadow-sm">
-                <div>
-                  <Label htmlFor="email" className="block text-sm font-medium">
+              <div className="space-y-5">
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-sm font-medium">
                     Email address
                   </Label>
-                  <div className="mt-1">
+                  <div className="relative">
                     <Input
                       id="email"
                       name="email"
                       type="email"
                       autoComplete="email"
                       required
-                      className="block w-full"
+                      className="pl-3 pr-3 py-2 h-11 bg-background border-border focus:border-primary focus-visible:ring-1 focus-visible:ring-primary/30 transition-all duration-200"
                       placeholder="name@example.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -151,35 +164,48 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                <div>
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="password" className="block text-sm font-medium">
+                    <Label htmlFor="password" className="text-sm font-medium">
                       Password
                     </Label>
                     <div className="text-sm">
-                      <Link href="/forgot-password" className="font-medium text-primary hover:text-primary/90">
-                        Forgot your password?
+                      <Link href="/forgot-password" className="font-medium text-primary hover:text-primary/90 transition-colors">
+                        Forgot password?
                       </Link>
                     </div>
                   </div>
-                  <div className="mt-1">
+                  <div className="relative">
                     <Input
                       id="password"
                       name="password"
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       autoComplete="current-password"
                       required
-                      className="block w-full"
+                      className="pl-3 pr-10 py-2 h-11 bg-background border-border focus:border-primary focus-visible:ring-1 focus-visible:ring-primary/30 transition-all duration-200"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <Checkbox id="remember-me" />
-                    <Label htmlFor="remember-me" className="ml-2 block text-sm">
+                <div className="flex items-center">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="remember-me" 
+                      checked={rememberMe}
+                      onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                      className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                    />
+                    <Label htmlFor="remember-me" className="text-sm text-muted-foreground">
                       Remember me
                     </Label>
                   </div>
@@ -187,8 +213,19 @@ export default function LoginPage() {
               </div>
 
               <div>
-                <Button type="submit" className="w-full h-12 rounded-md" disabled={isLoading}>
-                  {isLoading ? "Signing in..." : "Sign in"}
+                <Button 
+                  type="submit" 
+                  className="w-full h-11 rounded-md font-medium shadow-sm transition-all duration-300 hover:shadow-md"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <div className="flex items-center justify-center">
+                      <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-2" />
+                      <span>Signing in...</span>
+                    </div>
+                  ) : (
+                    "Sign in"
+                  )}
                 </Button>
               </div>
             </form>
@@ -200,13 +237,18 @@ export default function LoginPage() {
                   <div className="w-full border-t border-border" />
                 </div>
                 <div className="relative flex justify-center text-sm">
-                  <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+                  <span className="bg-background px-4 text-muted-foreground">Or continue with</span>
                 </div>
               </div>
 
-              {/* Designer: Google sign in button with logo */}
+              {/* Designer: Enhanced Google sign in button with improved styling */}
               <div className="mt-6">
-                <Button variant="outline" className="w-full h-12 rounded-md" onClick={handleGoogleSignIn}>
+                <Button 
+                  variant="outline" 
+                  className="w-full h-11 rounded-md font-medium border-border hover:bg-accent hover:text-accent-foreground transition-all duration-200"
+                  onClick={handleGoogleSignIn}
+                  disabled={isLoading}
+                >
                   <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
                       d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -230,14 +272,14 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Designer: Terms and privacy links */}
+            {/* Designer: Terms and privacy links with improved styling */}
             <p className="mt-6 text-center text-sm text-muted-foreground">
               By signing in, you agree to our{" "}
-              <Link href="/terms" className="font-medium text-primary hover:text-primary/90">
+              <Link href="/terms" className="font-medium text-primary hover:text-primary/90 transition-colors">
                 Terms of Service
               </Link>{" "}
               and{" "}
-              <Link href="/privacy" className="font-medium text-primary hover:text-primary/90">
+              <Link href="/privacy" className="font-medium text-primary hover:text-primary/90 transition-colors">
                 Privacy Policy
               </Link>
             </p>
@@ -245,7 +287,7 @@ export default function LoginPage() {
         </div>
 
         {/* Marketing content moved below the form */}
-        {/* Designer: Marketing content with animated features list */}
+        {/* Designer: Enhanced marketing content with card-style features and improved animations */}
         <div className="w-full bg-muted py-16 px-6 md:px-12">
           <div className="max-w-4xl mx-auto">
             <motion.div
@@ -254,10 +296,15 @@ export default function LoginPage() {
               transition={{ duration: 0.8, delay: 0.3 }}
             >
               <div className="text-center mb-12">
-                <div className="inline-flex items-center bg-background rounded-full px-4 py-1 mb-6">
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.5, delay: 0.5 }}
+                  className="inline-flex items-center bg-background rounded-full px-4 py-1.5 mb-6 shadow-sm"
+                >
                   <Sparkles className="w-4 h-4 text-primary mr-2" />
                   <span className="text-sm font-medium">Journaling reimagined</span>
-                </div>
+                </motion.div>
 
                 <h2 className="text-3xl md:text-4xl font-bold mb-6 leading-tight">
                   Design your days with
@@ -301,15 +348,15 @@ export default function LoginPage() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.5 + (i * 0.2) }}
-                    className="text-center"
+                    className="bg-background border border-border/40 rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-300"
                   >
                     <div className="flex justify-center mb-4">
-                      <div className="bg-background p-3 rounded-full text-primary">
+                      <div className="bg-primary/10 p-3 rounded-full text-primary">
                         {feature.icon}
                       </div>
                     </div>
-                    <h3 className="font-semibold mb-2">{feature.title}</h3>
-                    <p className="text-muted-foreground text-sm">{feature.description}</p>
+                    <h3 className="font-semibold text-center mb-2">{feature.title}</h3>
+                    <p className="text-muted-foreground text-sm text-center">{feature.description}</p>
                   </motion.div>
                 ))}
               </div>

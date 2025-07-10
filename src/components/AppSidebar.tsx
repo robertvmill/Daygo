@@ -125,7 +125,7 @@ export function AppSidebar() {
             <SidebarMenuButton asChild isActive={pathname.startsWith("/prompts")}>
               <Link href="/prompts">
                 <FileText className="mr-2 h-4 w-4" />
-                <span>My Prompts</span>
+                <span>My Templates</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -134,7 +134,7 @@ export function AppSidebar() {
             <SidebarMenuButton asChild isActive={pathname.startsWith("/community")}>
               <Link href="/community">
                 <Users className="mr-2 h-4 w-4" />
-                <span>Templates</span>
+                <span>Community Templates</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

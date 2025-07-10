@@ -12,9 +12,11 @@ import { getTemplates } from '@/services/templateService'
 import { JournalEntry, JournalTemplate } from '@/types/journal'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Eye, Plus, Filter, X, Crown } from 'lucide-react'
+import { Eye, Plus, Filter, X, Crown, Search } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { useJournalSearch } from '@/hooks/useJournalSearch'
 import { Calendar } from 'lucide-react'
 import { Timestamp } from 'firebase/firestore'
 import { getAuth, onAuthStateChanged } from "firebase/auth"
@@ -41,6 +43,12 @@ export function JournalPage() {
   const [userTier, setUserTier] = useState<SubscriptionTier>('free')
   const [currentUsage, setCurrentUsage] = useState({ journalEntries: 0, templates: 0 })
   const router = useRouter()
+  const searchParams = useSearchParams()
+  
+  // Search functionality
+  const [searchTerm, setSearchTerm] = useState('')
+  const [isSearchMode, setIsSearchMode] = useState(false)
+  const { results: searchResults, isLoading: isSearching, searchJournalEntries } = useJournalSearch()
 
   // Check authentication first
   useEffect(() => {
@@ -96,6 +104,19 @@ export function JournalPage() {
     fetchData()
   }, [authInitialized, isAuthenticated, userId])
 
+  // Handle search parameter from URL
+  useEffect(() => {
+    const searchQuery = searchParams.get('search')
+    if (searchQuery) {
+      setSearchTerm(searchQuery)
+      setIsSearchMode(true)
+      // Trigger search when entries are loaded
+      if (isAuthenticated && !loading) {
+        searchJournalEntries(searchQuery)
+      }
+    }
+  }, [searchParams, isAuthenticated, loading, searchJournalEntries])
+
   // Filter entries when template selection changes
   useEffect(() => {
     if (selectedTemplateId === null) {
@@ -136,6 +157,27 @@ export function JournalPage() {
 
   const clearFilter = () => {
     setSelectedTemplateId(null)
+  }
+
+  // Search functions
+  const handleSearch = async (query: string) => {
+    if (!query.trim()) {
+      setIsSearchMode(false)
+      setSearchTerm('')
+      router.push('/journal')
+      return
+    }
+    
+    setSearchTerm(query)
+    setIsSearchMode(true)
+    router.push(`/journal?search=${encodeURIComponent(query)}`)
+    await searchJournalEntries(query)
+  }
+
+  const clearSearch = () => {
+    setIsSearchMode(false)
+    setSearchTerm('')
+    router.push('/journal')
   }
 
   const getTemplateById = (templateId: string) => {
@@ -228,50 +270,94 @@ export function JournalPage() {
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold">Journal Entries</h1>
             <Button asChild>
-              <Link href="/journal/select-template">
+              <Link href="/journal/new">
                 <Plus className="mr-2 h-4 w-4" />
                 New Entry
               </Link>
             </Button>
           </div>
 
-          {/* Filter Section */}
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between border rounded-lg p-4 bg-muted/20">
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center flex-1">
-              <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4" />
-                <span className="text-sm font-medium">Filter by Template:</span>
+          {/* Search and Filter Section */}
+          <div className="border rounded-lg p-4 bg-muted/20 space-y-4">
+            {/* Search Bar */}
+            <div className="flex items-center gap-4">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Search your journal entries..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSearch(searchTerm)
+                    }
+                  }}
+                  className="pl-10"
+                />
               </div>
-              
-              <Select value={selectedTemplateId || "all"} onValueChange={(value) => setSelectedTemplateId(value === "all" ? null : value)}>
-                <SelectTrigger className="w-[280px]">
-                  <SelectValue placeholder="All entries" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All entries ({allEntries.length})</SelectItem>
-                  <SelectItem value="no-template">No template ({getNoTemplateEntriesCount()})</SelectItem>
-                  {templates.map((template) => {
-                    const count = allEntries.filter(entry => entry.templateId === template.id).length
-                    return (
-                      <SelectItem key={template.id} value={template.id}>
-                        {template.name} ({count})
-                      </SelectItem>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
-
-              {selectedTemplateId && (
-                <Button variant="outline" size="sm" onClick={clearFilter}>
+              <Button onClick={() => handleSearch(searchTerm)} disabled={isSearching}>
+                {isSearching ? 'Searching...' : 'Search'}
+              </Button>
+              {isSearchMode && (
+                <Button variant="outline" onClick={clearSearch}>
                   <X className="h-4 w-4 mr-1" />
-                  Clear Filter
+                  Clear Search
                 </Button>
               )}
             </div>
 
-            <div className="text-sm text-muted-foreground">
-              Showing {getFilteredEntriesCount()} of {allEntries.length} entries
-            </div>
+            {/* Filter Section - only show when not in search mode */}
+            {!isSearchMode && (
+              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center flex-1">
+                  <div className="flex items-center gap-2">
+                    <Filter className="h-4 w-4" />
+                    <span className="text-sm font-medium">Filter by Template:</span>
+                  </div>
+                  
+                  <Select value={selectedTemplateId || "all"} onValueChange={(value) => setSelectedTemplateId(value === "all" ? null : value)}>
+                    <SelectTrigger className="w-[280px]">
+                      <SelectValue placeholder="All entries" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All entries ({allEntries.length})</SelectItem>
+                      <SelectItem value="no-template">No template ({getNoTemplateEntriesCount()})</SelectItem>
+                      {templates.map((template) => {
+                        const count = allEntries.filter(entry => entry.templateId === template.id).length
+                        return (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name} ({count})
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+
+                  {selectedTemplateId && (
+                    <Button variant="outline" size="sm" onClick={clearFilter}>
+                      <X className="h-4 w-4 mr-1" />
+                      Clear Filter
+                    </Button>
+                  )}
+                </div>
+
+                <div className="text-sm text-muted-foreground">
+                  Showing {getFilteredEntriesCount()} of {allEntries.length} entries
+                </div>
+              </div>
+            )}
+
+            {/* Search Results Summary */}
+            {isSearchMode && (
+              <div className="text-sm text-muted-foreground">
+                {isSearching ? (
+                  'Searching...'
+                ) : (
+                  `Found ${searchResults.length} results for "${searchTerm}"`
+                )}
+              </div>
+            )}
           </div>
 
           {/* Active Filter Indicator */}
@@ -292,7 +378,17 @@ export function JournalPage() {
             <div className="flex justify-center py-10">
               <div className="animate-pulse">Loading entries...</div>
             </div>
-          ) : entries.length === 0 ? (
+          ) : (isSearchMode && searchResults.length === 0 && !isSearching) ? (
+            <div className="text-center py-10 border rounded-lg">
+              <h3 className="text-lg font-medium">No results found</h3>
+              <p className="text-muted-foreground mt-1">
+                Try searching with different keywords or clear your search
+              </p>
+              <Button variant="outline" onClick={clearSearch} className="mt-4">
+                Clear Search
+              </Button>
+            </div>
+          ) : (!isSearchMode && entries.length === 0) ? (
             <div className="text-center py-10 border rounded-lg">
               {selectedTemplateId ? (
                 <>
@@ -305,7 +401,7 @@ export function JournalPage() {
                       Clear Filter
                     </Button>
                     <Button asChild>
-                      <Link href="/journal/select-template">
+                      <Link href="/journal/new">
                         <Plus className="mr-2 h-4 w-4" />
                         Create Entry
                       </Link>
@@ -317,7 +413,7 @@ export function JournalPage() {
                   <h3 className="text-lg font-medium">No journal entries yet</h3>
                   <p className="text-muted-foreground mt-1">Create your first entry to get started</p>
                   <Button asChild className="mt-4">
-                    <Link href="/journal/select-template">
+                    <Link href="/journal/new">
                       <Plus className="mr-2 h-4 w-4" />
                       Create Entry
                     </Link>
@@ -327,43 +423,82 @@ export function JournalPage() {
             </div>
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {entries.map((entry) => {
-                const template = entry.templateId ? getTemplateById(entry.templateId) : null
-                return (
-                  <Card key={entry.id} className="overflow-hidden flex flex-col">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <CardTitle className="truncate flex-1">{entry.title}</CardTitle>
-                        {template && (
-                          <Badge variant="outline" className="shrink-0 text-xs">
-                            {template.name}
+              {isSearchMode ? (
+                // Render search results
+                searchResults.map((result) => {
+                  return (
+                    <Card key={result.id} className="overflow-hidden flex flex-col">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <CardTitle className="truncate flex-1">{result.title}</CardTitle>
+                          <Badge variant="secondary" className="shrink-0 text-xs">
+                            {Math.round(result.relevanceScore * 100)}% match
                           </Badge>
-                        )}
-                      </div>
-                      <CardDescription className="flex items-center">
-                        <Calendar className="h-3 w-3 mr-1 inline" />
-                        {formatDate(entry.createdAt)}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex-1">
-                      <p className="line-clamp-3 text-sm text-muted-foreground">
-                        {entry.content}
-                      </p>
-                    </CardContent>
-                    <CardFooter className="pt-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="w-full" 
-                        onClick={() => router.push(`/journal/${entry.id}`)}
-                      >
-                        <Eye className="h-4 w-4 mr-2" />
-                        Read More
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                )
-              })}
+                        </div>
+                        <CardDescription className="flex items-center">
+                          <Calendar className="h-3 w-3 mr-1 inline" />
+                          {result.createdAt ? new Date(result.createdAt).toLocaleDateString() : 'Unknown date'}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex-1">
+                        <p className="line-clamp-3 text-sm text-muted-foreground">
+                          {result.content}
+                        </p>
+                      </CardContent>
+                      <CardFooter className="pt-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="w-full" 
+                          onClick={() => router.push(`/journal/${result.id}`)}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          Read More
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  )
+                })
+              ) : (
+                // Render regular entries
+                entries.map((entry) => {
+                  const template = entry.templateId ? getTemplateById(entry.templateId) : null
+                  return (
+                    <Card key={entry.id} className="overflow-hidden flex flex-col">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <CardTitle className="truncate flex-1">{entry.title}</CardTitle>
+                          {template && (
+                            <Badge variant="outline" className="shrink-0 text-xs">
+                              {template.name}
+                            </Badge>
+                          )}
+                        </div>
+                        <CardDescription className="flex items-center">
+                          <Calendar className="h-3 w-3 mr-1 inline" />
+                          {formatDate(entry.createdAt)}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex-1">
+                        <p className="line-clamp-3 text-sm text-muted-foreground">
+                          {entry.content}
+                        </p>
+                      </CardContent>
+                      <CardFooter className="pt-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="w-full" 
+                          onClick={() => router.push(`/journal/${entry.id}`)}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          Read More
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  )
+                })
+              )}
             </div>
           )}
         </main>

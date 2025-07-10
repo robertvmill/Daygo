@@ -11,7 +11,7 @@ import { CalendarDays, FileText, PlusCircle, Clock, Eye, BookOpen, Calendar, Edi
 import { format } from "date-fns"
 import { JournalEntryForm } from "./JournalEntryForm"
 import { WritingGoalModal } from "./WritingGoalModal"
-import { DailyWordChart } from "@/components/ui/daily-word-chart"
+import { ActivityHeatmap } from "@/components/ui/activity-heatmap"
 import { getAuth, onAuthStateChanged } from "firebase/auth"
 import { toast } from "sonner"
 import { JournalEntry } from "@/types/journal"
@@ -73,8 +73,8 @@ export function HomePage() {
         const stats = await calculateJournalStats()
         setJournalStats(stats)
         
-        // Get daily word counts for the last 7 days
-        const dailyData = await getDailyWordCounts(7)
+        // Get daily word counts for the last 6 months (approximately 180 days)
+        const dailyData = await getDailyWordCounts(180)
         setDailyWordData(dailyData)
         
         // Get goal progress if there are any words written
@@ -126,7 +126,7 @@ export function HomePage() {
   }, [authInitialized, isAuthenticated, userId])
 
   const handleNewEntry = () => {
-    router.push("/journal/select-template")
+    router.push("/journal/new")
   }
 
   const handleViewAllEntries = () => {
@@ -497,18 +497,18 @@ export function HomePage() {
               ))}
             </div>
             
-            {/* Daily Word Count Chart */}
+            {/* Writing Activity Heatmap */}
             <div className="mt-6">
-              <DailyWordChart data={dailyWordData} />
+              <ActivityHeatmap data={dailyWordData} />
             </div>
           </div>
         )}
 
-        {/* Daily Word Count Chart - standalone when no goals */}
+        {/* Writing Activity Heatmap - standalone when no goals */}
         {goalProgress.length === 0 && journalStats.totalWords > 0 && (
           <div className="mt-6">
             <h3 className="text-lg font-medium mb-3">Writing Progress</h3>
-            <DailyWordChart data={dailyWordData} />
+            <ActivityHeatmap data={dailyWordData} />
           </div>
         )}
       </div>

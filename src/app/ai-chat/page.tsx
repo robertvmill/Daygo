@@ -4,10 +4,18 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { BotIcon, SendIcon, ThermometerIcon, ArrowRightLeft, MicIcon, MicOffIcon } from "lucide-react";
+import { 
+  BotIcon, 
+  SendIcon, 
+  ThermometerIcon, 
+  ArrowRightLeft, 
+  MicIcon, 
+  MicOffIcon,
+  Copy,
+  RefreshCcw
+} from "lucide-react";
 import { useChat } from '@ai-sdk/react';
 import { Message } from 'ai';
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
@@ -17,6 +25,7 @@ import { toast } from "sonner";
 // Import markdown renderer
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 // Type definitions for message parts and tool results
 interface ToolInvocation {
@@ -73,8 +82,8 @@ type MessagePart = TextPart | ToolInvocationPart | ToolResultPart;
 // Beautiful animated loading component for journal search
 const JournalSearchAnimation = () => {
   return (
-    <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
-      <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
+    <div className="flex items-center gap-3 p-3 bg-blue-50/50 dark:bg-blue-950/10 rounded-lg border border-blue-100 dark:border-blue-900/50">
+      <div className="w-6 h-6 rounded-full bg-blue-500/80 flex items-center justify-center">
         <BotIcon className="h-3 w-3 text-white" />
       </div>
       <div className="flex-1">
@@ -82,10 +91,117 @@ const JournalSearchAnimation = () => {
           Searching through your journal entries...
         </div>
         {/* Simple loading bar */}
-        <div className="w-full bg-blue-200 dark:bg-blue-800 rounded-full h-2 overflow-hidden">
-          <div className="h-full bg-blue-500 rounded-full animate-[progress_2s_ease-in-out_infinite]"></div>
+        <div className="w-full bg-blue-100 dark:bg-blue-900/50 rounded-full h-1.5 overflow-hidden">
+          <div className="h-full bg-blue-500/80 rounded-full animate-[progress_2s_ease-in-out_infinite]"></div>
         </div>
       </div>
+    </div>
+  );
+};
+
+// Message loading animation
+const MessageLoading = () => {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+      className="text-foreground"
+    >
+      <circle cx="4" cy="12" r="2" fill="currentColor">
+        <animate
+          id="spinner_qFRN"
+          begin="0;spinner_OcgL.end+0.25s"
+          attributeName="cy"
+          calcMode="spline"
+          dur="0.6s"
+          values="12;6;12"
+          keySplines=".33,.66,.66,1;.33,0,.66,.33"
+        />
+      </circle>
+      <circle cx="12" cy="12" r="2" fill="currentColor">
+        <animate
+          begin="spinner_qFRN.begin+0.1s"
+          attributeName="cy"
+          calcMode="spline"
+          dur="0.6s"
+          values="12;6;12"
+          keySplines=".33,.66,.66,1;.33,0,.66,.33"
+        />
+      </circle>
+      <circle cx="20" cy="12" r="2" fill="currentColor">
+        <animate
+          id="spinner_OcgL"
+          begin="spinner_qFRN.begin+0.2s"
+          attributeName="cy"
+          calcMode="spline"
+          dur="0.6s"
+          values="12;6;12"
+          keySplines=".33,.66,.66,1;.33,0,.66,.33"
+        />
+      </circle>
+    </svg>
+  );
+};
+
+// Chat bubble component for consistent message styling
+const ChatBubble = ({ 
+  variant = "received", 
+  children, 
+  className = "" 
+}: {
+  variant?: "sent" | "received";
+  children: React.ReactNode;
+  className?: string;
+}) => {
+  return (
+    <div
+      className={`flex items-start gap-3 mb-6 ${
+        variant === "sent" ? "flex-row-reverse" : ""
+      } ${className}`}
+    >
+      {children}
+    </div>
+  );
+};
+
+// Chat bubble message component
+const ChatBubbleMessage = ({ 
+  variant = "received", 
+  isLoading = false, 
+  children, 
+  className = "" 
+}: {
+  variant?: "sent" | "received";
+  isLoading?: boolean;
+  children?: React.ReactNode;
+  className?: string;
+}) => {
+  return (
+    <div
+      className={`rounded-lg p-4 max-w-[85%] ${
+        variant === "sent" 
+          ? "bg-primary/90 text-primary-foreground" 
+          : "bg-muted/50 border border-border/30"
+      } ${className}`}
+    >
+      {isLoading ? (
+        <div className="flex items-center space-x-2">
+          <MessageLoading />
+        </div>
+      ) : (
+        children
+      )}
+    </div>
+  );
+};
+
+// Chat bubble actions component
+const ChatBubbleActions = ({ children, className = "" }: { children: React.ReactNode; className?: string; }) => {
+  return (
+    <div className={`flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity ${className}`}>
+      {children}
     </div>
   );
 };
@@ -175,7 +291,6 @@ const useSpeechRecognition = () => {
       }
 
       setTranscript(data.text);
-      toast.success('Audio transcribed successfully!');
     } catch (err) {
       console.error('Transcription error:', err);
       setError('Failed to transcribe audio');
@@ -256,7 +371,13 @@ export default function AiChatPage() {
         and provide thoughtful responses to help users with their personal growth and self-awareness.
         Be supportive, thoughtful, and personalized in your responses.
         
-        IMPORTANT: Never include debug information, JSON objects, or technical messages like {"type":"step-start"} in your responses. Only provide natural, conversational responses to users.
+        CRITICAL INSTRUCTION: NEVER include any debug information, JSON objects, step indicators, or technical messages in your responses. Do not output anything that looks like:
+        - {"type":"step-start"}
+        - {"type":"anything"}
+        - Any JSON-formatted debug messages
+        - Step indicators or processing messages
+        
+        Only provide natural, conversational responses directly to the user. If you need to use tools, use them silently and only share the meaningful results with the user.
         
         You have access to the following tools:
         1. A weather tool that you can use to get the current weather in a specific location (in Fahrenheit).
@@ -339,7 +460,7 @@ export default function AiChatPage() {
       <div className="flex flex-col gap-2">
         <div className="text-sm font-medium">Found {result.entries.length} relevant journal entries:</div>
         {result.entries.map((entry: JournalEntry, index: number) => (
-          <div key={index} className="border-l-2 border-primary pl-2 mb-1">
+          <div key={index} className="border-l-2 border-primary/70 pl-3 py-1 mb-1 bg-primary/5 rounded-r-md">
             <div className="font-medium text-sm">{entry.title} {entry.date && `(${entry.date})`}</div>
             <div className="text-sm line-clamp-3">{entry.content}</div>
           </div>
@@ -352,9 +473,15 @@ export default function AiChatPage() {
   const hasToolResult = (message: Message, toolName: string) => {
     if (!message.parts || !Array.isArray(message.parts)) return false;
     return message.parts.some(part => {
-      const resultPart = part as ToolResultPart;
-      return resultPart.type === 'tool-result' && 
-             resultPart.toolResult?.toolName === toolName;
+      // Check if the part has tool result properties using safe type checking
+      const unknownPart = part as unknown;
+      return typeof unknownPart === 'object' && 
+             unknownPart !== null &&
+             'type' in unknownPart && 
+             (unknownPart as { type: string }).type === 'tool-result' &&
+             'toolResult' in unknownPart &&
+             typeof (unknownPart as { toolResult: { toolName: string } }).toolResult === 'object' &&
+             (unknownPart as { toolResult: { toolName: string } }).toolResult?.toolName === toolName;
     });
   };
 
@@ -423,7 +550,7 @@ export default function AiChatPage() {
                 strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
                 em: ({ children }) => <em className="italic">{children}</em>,
                 code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-sm">{children}</code>,
-                blockquote: ({ children }) => <blockquote className="border-l-4 border-primary pl-4 italic">{children}</blockquote>,
+                blockquote: ({ children }) => <blockquote className="border-l-4 border-primary/50 pl-4 italic">{children}</blockquote>,
               }}
             >
               {part.text}
@@ -449,7 +576,7 @@ export default function AiChatPage() {
         return (
           <div key={`${message.id}-${index}`} className="bg-muted/30 p-3 rounded-md my-2 text-sm">
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-blue-500 animate-pulse"></div>
+              <div className="w-4 h-4 rounded-full bg-blue-500/80 animate-pulse"></div>
               <span className="font-medium">Using {toolName}...</span>
             </div>
           </div>
@@ -460,7 +587,7 @@ export default function AiChatPage() {
           const resultData = JSON.parse(part.toolResult.toolResultJSON);
           
           return (
-            <div key={`${message.id}-${index}`} className="bg-muted/20 p-2 rounded-md my-2">
+            <div key={`${message.id}-${index}`} className="my-2">
               {resultToolName === 'weather' && formatWeatherResult(resultData as WeatherResult)}
               {resultToolName === 'convertFahrenheitToCelsius' && formatTempConversion(resultData as TempConversionResult)}
               {resultToolName === 'searchJournalEntries' && formatJournalResults(resultData as JournalSearchResult)}
@@ -478,13 +605,19 @@ export default function AiChatPage() {
     }
   };
 
+  // Copy message to clipboard
+  const copyMessageToClipboard = (content: string) => {
+    navigator.clipboard.writeText(content);
+    toast.success("Message copied to clipboard");
+  };
+
   // Layout structure with sidebar and main content area
   return (
     <div className="grid grid-cols-[auto_1fr] min-h-screen w-full">
       <AppSidebar />
       <SidebarInset className="flex flex-col w-full overflow-x-hidden">
         {/* Header with breadcrumb navigation */}
-        <header className="flex sticky top-0 z-10 h-16 shrink-0 items-center gap-2 border-b bg-background px-4 w-full">
+        <header className="flex sticky top-0 z-10 h-14 shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur-sm px-4 w-full">
           <SidebarTrigger />
           <Separator orientation="vertical" className="mr-2 h-4" />
           <Breadcrumb>
@@ -497,158 +630,188 @@ export default function AiChatPage() {
         </header>
         
         {/* Main content area */}
-        <main className="flex flex-1 flex-col gap-6 p-4 md:p-8 overflow-auto w-full max-w-full overflow-x-hidden">
+        <main className="flex flex-1 flex-col gap-6 p-0 overflow-auto w-full max-w-full overflow-x-hidden">
           {/* Page title and description */}
-          <div className="flex items-center justify-between w-full">
+          <div className="flex items-center justify-between w-full px-6 pt-6">
             <div>
-              <h1 className="text-3xl font-bold tracking-tight">Talk to Daygo AI</h1>
-              <p className="text-muted-foreground">
+              <h1 className="text-2xl font-semibold tracking-tight">Talk to Daygo AI</h1>
+              <p className="text-muted-foreground text-sm">
                 Your personal AI assistant that knows your journal entries and can provide insights.
               </p>
             </div>
           </div>
           
-          {/* Chat interface card */}
-          <div className="grid gap-6 w-full max-w-full">
-            <Card className="w-full max-w-full">
-              <CardHeader className="pb-4">
-                <CardTitle className="flex items-center">
-                  <BotIcon className="mr-2 h-5 w-5" />
-                  Chat with Daygo AI
-                </CardTitle>
-                <CardDescription>
-                  Ask questions about your journal entries, get insights, or just chat about your day.
-                  Try asking &quot;What have I written about productivity?&quot; or &quot;Find entries where I discussed my goals.&quot;
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="w-full">
-                <div className="flex flex-col gap-4 w-full">
-                  {/* Chat messages container */}
-                  <div className="flex flex-col gap-3 h-[400px] overflow-y-auto border rounded-md p-4 w-full overflow-x-hidden">
-                    {/* Welcome message or chat history */}
-                    {messages.filter(m => m.role !== 'system').length === 0 ? (
-                      <div className="flex justify-start w-full">
-                        <div className="w-full max-w-[80%] rounded-lg px-4 py-2 bg-muted">
-                          Hello! I&apos;m Daygo AI, your personal journal assistant. How can I help you today? 
-                          You can ask me about your journal entries, reflect on your writing, or even get insights from your past reflections.
-                        </div>
-                      </div>
-                    ) : (
-                      messages.filter(m => m.role !== 'system').map((message) => (
-                        <div
-                          key={message.id}
-                          className={`flex ${
-                            message.role === 'user' ? 'justify-end' : 'justify-start'
-                          } w-full`}
-                        >
-                          <div
-                            className={`w-full max-w-[80%] rounded-lg px-4 py-2 ${
-                              message.role === 'user'
-                                ? 'bg-primary text-primary-foreground'
-                                : 'bg-muted'
-                            }`}
-                          >
-                            {message.parts && Array.isArray(message.parts) 
-                              ? message.parts.map((part, i) => renderMessagePart(message, part as MessagePart, i))
-                              : message.content}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                    {/* Loading indicator */}
-                    {isLoading && (
-                      <div className="flex justify-start w-full">
-                        <div className="w-full max-w-[80%] rounded-lg px-4 py-2 bg-muted">
-                          <div className="flex gap-1">
-                            <div className="h-2 w-2 rounded-full bg-current animate-bounce" />
-                            <div className="h-2 w-2 rounded-full bg-current animate-bounce delay-75" />
-                            <div className="h-2 w-2 rounded-full bg-current animate-bounce delay-150" />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {/* Error display */}
-                    {error && (
-                      <div className="flex justify-center w-full">
-                        <div className="w-full max-w-[80%] rounded-lg px-4 py-2 bg-destructive text-destructive-foreground">
-                          <p className="font-medium">Error: {error.message || "Something went wrong. Please try again."}</p>
-                          {error.cause ? (
-                            <p className="text-xs mt-1">Details: {String(JSON.stringify(error.cause))}</p>
-                          ) : null}
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={handleRetry} 
-                            className="mt-2 bg-background/10 hover:bg-background/20 text-white"
-                          >
-                            Retry
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                    <div ref={messagesEndRef} />
-                  </div>
-                  
-                  {/* Message input form with speech-to-text */}
-                  <form onSubmit={handleSubmit} className="flex flex-col gap-2">
-                    <Textarea
-                      placeholder={
-                        isTranscribing 
-                          ? "Transcribing audio..." 
-                          : isListening 
-                            ? "Recording... Click mic to stop" 
-                            : "Type your message... (e.g., 'What have I written about productivity?')"
-                      }
-                      value={input}
-                      onChange={handleInputChange}
-                      disabled={isLoading || isTranscribing}
-                      className={`resize-none ${
-                        isListening 
-                          ? 'ring-2 ring-red-500 bg-red-50 dark:bg-red-950/20' 
-                          : isTranscribing 
-                            ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-950/20'
-                            : ''
-                      }`}
-                      rows={3}
-                    />
-                    <div className="flex gap-2">
-                      <Button 
-                        type="button" 
-                        variant={isListening ? "destructive" : "outline"}
-                        size="default"
-                        onClick={handleMicrophoneClick}
-                        disabled={isLoading || isTranscribing}
-                        className={`${isListening ? 'animate-pulse' : ''}`}
+          {/* Chat interface */}
+          <div className="flex-1 flex flex-col px-4 md:px-6 pb-6">
+            {/* Chat messages container */}
+            <div className="flex-1 flex flex-col space-y-4 overflow-y-auto py-4">
+              {/* Welcome message or chat history */}
+              {messages.filter(m => m.role !== 'system').length === 0 ? (
+                <ChatBubble variant="received">
+                  <Avatar className="h-8 w-8 mt-1">
+                    <AvatarFallback className="bg-primary/20 text-primary">AI</AvatarFallback>
+                  </Avatar>
+                  <ChatBubbleMessage variant="received">
+                    <p className="mb-2">Hello! I&apos;m Daygo AI, your personal journal assistant. How can I help you today?</p>
+                    <p>You can ask me about your journal entries, reflect on your writing, or even get insights from your past reflections.</p>
+                  </ChatBubbleMessage>
+                </ChatBubble>
+              ) : (
+                messages.filter(m => m.role !== 'system').map((message) => (
+                  <ChatBubble
+                    key={message.id}
+                    variant={message.role === 'user' ? 'sent' : 'received'}
+                    className="group"
+                  >
+                    <Avatar className="h-8 w-8 mt-1">
+                      <AvatarFallback className={message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-primary/20 text-primary'}>
+                        {message.role === 'user' ? 'You' : 'AI'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 max-w-[85%]">
+                      <ChatBubbleMessage
+                        variant={message.role === 'user' ? 'sent' : 'received'}
                       >
-                        {isTranscribing ? (
-                          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                        ) : isListening ? (
-                          <MicOffIcon className="h-4 w-4" />
-                        ) : (
-                          <MicIcon className="h-4 w-4" />
-                        )}
-                      </Button>
-                      <Button type="submit" disabled={isLoading || !input.trim() || isTranscribing} className="flex-1">
-                        <SendIcon className="h-4 w-4 mr-2" />
-                        Send
-                      </Button>
+                        {message.parts && Array.isArray(message.parts) 
+                          ? message.parts.map((part, i) => renderMessagePart(message, part as MessagePart, i))
+                          : message.content}
+                      </ChatBubbleMessage>
+                      
+                      {message.role === 'assistant' && (
+                        <ChatBubbleActions>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-7 w-7 rounded-full"
+                            onClick={() => copyMessageToClipboard(message.content)}
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-7 w-7 rounded-full"
+                            onClick={() => reload()}
+                          >
+                            <RefreshCcw className="h-3.5 w-3.5" />
+                          </Button>
+                        </ChatBubbleActions>
+                      )}
                     </div>
-                  </form>
-                  
-                  {/* Speech recognition status */}
-                  {isListening && (
-                    <div className="text-sm text-center text-red-600 dark:text-red-400">
-                      🎤 Recording... Click the microphone button to stop
-                    </div>
-                  )}
-                  {isTranscribing && (
-                    <div className="text-sm text-center text-blue-600 dark:text-blue-400">
-                      🤖 Transcribing your audio with AI...
-                    </div>
-                  )}
+                  </ChatBubble>
+                ))
+              )}
+              
+              {/* Loading indicator */}
+              {isLoading && (
+                <ChatBubble variant="received">
+                  <Avatar className="h-8 w-8 mt-1">
+                    <AvatarFallback className="bg-primary/20 text-primary">AI</AvatarFallback>
+                  </Avatar>
+                  <ChatBubbleMessage variant="received" isLoading />
+                </ChatBubble>
+              )}
+              
+              {/* Error display */}
+              {error && (
+                <div className="flex justify-center w-full my-4">
+                  <div className="w-full max-w-[80%] rounded-lg px-4 py-3 bg-destructive/10 text-destructive border border-destructive/20">
+                    <p className="font-medium">Error: {error.message || "Something went wrong. Please try again."}</p>
+                    {error.cause ? (
+                      <p className="text-xs mt-1">Details: {String(JSON.stringify(error.cause))}</p>
+                    ) : null}
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={handleRetry} 
+                      className="mt-2 border-destructive/30 hover:bg-destructive/10"
+                    >
+                      Retry
+                    </Button>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+            
+            {/* Message input form with speech-to-text */}
+            <div className="sticky bottom-0 bg-background/80 backdrop-blur-sm pt-2 pb-4">
+              <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+                <div className="relative rounded-lg border bg-background focus-within:ring-1 focus-within:ring-ring">
+                  <Textarea
+                    placeholder={
+                      isTranscribing 
+                        ? "Transcribing audio..." 
+                        : isListening 
+                          ? "Recording... Click mic to stop" 
+                          : "Type your message... (e.g., 'What have I written about productivity?')"
+                    }
+                    value={input}
+                    onChange={handleInputChange}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (!isLoading && input.trim() && !isTranscribing) {
+                          // Create a synthetic form submit event
+                          const form = e.currentTarget.closest('form');
+                          if (form) {
+                            const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+                            form.dispatchEvent(submitEvent);
+                          }
+                        }
+                      }
+                    }}
+                    disabled={isLoading || isTranscribing}
+                    className={`min-h-[60px] max-h-[180px] resize-none rounded-lg bg-background border-0 p-3 pr-12 shadow-none focus-visible:ring-0 ${
+                      isListening 
+                        ? 'ring-2 ring-red-500 bg-red-50 dark:bg-red-950/20' 
+                        : isTranscribing 
+                          ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-950/20'
+                          : ''
+                    }`}
+                    rows={1}
+                  />
+                  <div className="absolute right-2 bottom-2 flex gap-2">
+                    <Button 
+                      type="button" 
+                      variant={isListening ? "destructive" : "ghost"}
+                      size="icon"
+                      onClick={handleMicrophoneClick}
+                      disabled={isLoading || isTranscribing}
+                      className={`h-8 w-8 rounded-full ${isListening ? 'animate-pulse' : ''}`}
+                    >
+                      {isTranscribing ? (
+                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      ) : isListening ? (
+                        <MicOffIcon className="h-4 w-4" />
+                      ) : (
+                        <MicIcon className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button 
+                      type="submit" 
+                      size="icon" 
+                      disabled={isLoading || !input.trim() || isTranscribing}
+                      className="h-8 w-8 rounded-full"
+                    >
+                      <SendIcon className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                
+                {/* Speech recognition status */}
+                {isListening && (
+                  <div className="text-xs text-center text-red-600 dark:text-red-400">
+                    🎤 Recording... Click the microphone button to stop
+                  </div>
+                )}
+                {isTranscribing && (
+                  <div className="text-xs text-center text-blue-600 dark:text-blue-400">
+                    🤖 Transcribing your audio with AI...
+                  </div>
+                )}
+              </form>
+            </div>
           </div>
         </main>
       </SidebarInset>

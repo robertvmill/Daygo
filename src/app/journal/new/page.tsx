@@ -6,7 +6,7 @@ import { AppSidebar } from '@/components/AppSidebar';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage } from '@/components/ui/breadcrumb';
 import { Separator } from '@/components/ui/separator';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
-import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -18,7 +18,7 @@ import { addJournalEntry, generateContentFromTemplateFields } from '@/services/j
 import { countWords } from '@/services/journalStatsService';
 import { JournalTemplate, TemplateField } from '@/types/journal';
 import Link from 'next/link';
-import { ArrowLeft, Save, Camera, Upload, X, Mic, Square, Type } from 'lucide-react';
+import { ArrowLeft, Save, X, Mic, Square, FileText, Image } from 'lucide-react';
 import { Timestamp } from 'firebase/firestore';
 import { extractTextFromPhoto, validatePhotoFile } from '@/services/photoProcessingService';
 
@@ -63,19 +63,15 @@ export default function NewJournalEntryPage() {
   const [isExtractingText, setIsExtractingText] = useState(false);
   const [textExtractionComplete, setTextExtractionComplete] = useState(false);
   
-  // Drag and drop states
-  const [isDragActive, setIsDragActive] = useState(false);
-  const [isDragAccept, setIsDragAccept] = useState(false);
-  const [isDragReject, setIsDragReject] = useState(false);
+
 
   // Speech-to-text states
   const [isRecording, setIsRecording] = useState(false);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [recordingFor, setRecordingFor] = useState<string | null>(null); // Track which field is being recorded for
   const [isTranscribing, setIsTranscribing] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  
 
   // Load template data (either from user templates, community template, or photo journal)
   useEffect(() => {
@@ -218,18 +214,17 @@ export default function NewJournalEntryPage() {
     }
   };
 
-  // Handle camera capture (opens camera on mobile)
-  const handleCameraCapture = () => {
+  // Handle unified photo upload (both camera and file selection)
+  const handlePhotoUpload = () => {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     if (fileInputRef.current) {
-      fileInputRef.current.setAttribute('capture', 'environment');
-      fileInputRef.current.click();
-    }
-  };
-
-  // Handle file upload button
-  const handleFileUpload = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.removeAttribute('capture');
+      if (isMobile) {
+        // On mobile, show both camera and file options
+        fileInputRef.current.setAttribute('capture', 'environment');
+      } else {
+        // On desktop, just file selection
+        fileInputRef.current.removeAttribute('capture');
+      }
       fileInputRef.current.click();
     }
   };
@@ -289,7 +284,6 @@ export default function NewJournalEntryPage() {
       mediaRecorder.onstop = async () => {
         // Combine all audio chunks into one blob
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        setAudioBlob(audioBlob);
         
         // Send audio to speech-to-text API
         await transcribeAudio(audioBlob, fieldName);
@@ -357,75 +351,7 @@ export default function NewJournalEntryPage() {
     }
   };
 
-  // Drag and drop handlers
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragActive(true);
-    
-    // Check if the dragged item contains files
-    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-      const item = e.dataTransfer.items[0];
-      if (item.type.startsWith('image/')) {
-        setIsDragAccept(true);
-        setIsDragReject(false);
-      } else {
-        setIsDragAccept(false);
-        setIsDragReject(true);
-      }
-    }
-  };
 
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    // Only remove drag state if we're leaving the drop zone entirely
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = e.clientX;
-    const y = e.clientY;
-    
-    if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) {
-      setIsDragActive(false);
-      setIsDragAccept(false);
-      setIsDragReject(false);
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    setIsDragActive(false);
-    setIsDragAccept(false);
-    setIsDragReject(false);
-    
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-      const file = files[0];
-      
-      // Validate file using the photo processing service
-      const validation = validatePhotoFile(file);
-      if (!validation.isValid) {
-        toast.error(validation.error || 'Invalid file');
-        return;
-      }
-
-      setSelectedImage(file);
-      
-      // Create preview
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setImagePreview(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
 
   const handleInputChange = (fieldName: string, value: string | boolean) => {
     setFormData(prev => ({
@@ -632,8 +558,6 @@ export default function NewJournalEntryPage() {
       case 'file':
         return (
           <div key={field.name} className="space-y-4">
-            <Label htmlFor={field.name}>{field.label} {field.required && <span className="text-destructive">*</span>}</Label>
-            
             {/* Hidden file input */}
             <input
               ref={fileInputRef}
@@ -643,8 +567,8 @@ export default function NewJournalEntryPage() {
               className="hidden"
             />
             
-            {/* Image preview and text extraction */}
-            {imagePreview ? (
+            {/* Only show image preview and text extraction when image is uploaded */}
+            {imagePreview && (
               <div className="space-y-4">
                 <div className="relative">
                   <img 
@@ -708,104 +632,6 @@ export default function NewJournalEntryPage() {
                   </div>
                 )}
               </div>
-            ) : (
-              /* Upload buttons with drag and drop */
-              <div className="space-y-3">
-                {/* Drag and Drop Zone */}
-                <div
-                  onDragEnter={handleDragEnter}
-                  onDragLeave={handleDragLeave}
-                  onDragOver={handleDragOver}
-                  onDrop={handleDrop}
-                  className={`
-                    border-2 border-dashed rounded-lg p-6 transition-all duration-200 cursor-pointer
-                    ${isDragActive 
-                      ? isDragAccept 
-                        ? 'border-green-400 bg-green-50 dark:bg-green-950/20' 
-                        : isDragReject 
-                          ? 'border-red-400 bg-red-50 dark:bg-red-950/20'
-                          : 'border-blue-400 bg-blue-50 dark:bg-blue-950/20'
-                      : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
-                    }
-                  `}
-                  onClick={handleFileUpload}
-                >
-                  <div className="text-center">
-                    <Upload className={`mx-auto h-12 w-12 mb-4 ${
-                      isDragActive 
-                        ? isDragAccept 
-                          ? 'text-green-500' 
-                          : isDragReject 
-                            ? 'text-red-500'
-                            : 'text-blue-500'
-                        : 'text-gray-400'
-                    }`} />
-                    <div className="space-y-2">
-                      {isDragActive ? (
-                        isDragAccept ? (
-                          <p className="text-green-600 dark:text-green-400 font-medium">
-                            Drop your image here
-                          </p>
-                        ) : isDragReject ? (
-                          <p className="text-red-600 dark:text-red-400 font-medium">
-                            Only image files are allowed
-                          </p>
-                        ) : (
-                          <p className="text-blue-600 dark:text-blue-400 font-medium">
-                            Drop files here
-                          </p>
-                        )
-                      ) : (
-                        <>
-                          <p className="text-lg font-medium text-foreground">
-                            Drag & drop an image here
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            or click to browse files
-                          </p>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Alternative buttons */}
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">
-                      Or use these options
-                    </span>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleCameraCapture}
-                    className="h-16 flex flex-col gap-2"
-                  >
-                    <Camera className="h-5 w-5" />
-                    <span>Take Photo</span>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleFileUpload}
-                    className="h-16 flex flex-col gap-2"
-                  >
-                    <Upload className="h-5 w-5" />
-                    <span>Browse Files</span>
-                  </Button>
-                </div>
-                
-                <p className="text-sm text-muted-foreground text-center">
-                  {field.placeholder}
-                </p>
-              </div>
             )}
           </div>
         );
@@ -861,18 +687,31 @@ export default function NewJournalEntryPage() {
       case 'textarea':
         return (
           <div key={field.name} className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor={field.name}>{field.label} {field.required && <span className="text-destructive">*</span>}</Label>
+            {field.label !== 'Journal Content' && (
+              <Label htmlFor={field.name} className="text-sm font-medium">
+                {field.label} {field.required && <span className="text-destructive">*</span>}
+              </Label>
+            )}
+            <div className="relative group">
+              <Textarea
+                id={field.name}
+                placeholder={field.placeholder || "Start writing your thoughts..."}
+                value={typeof formData[field.name] === 'string' ? formData[field.name] as string : ''}
+                onChange={(e) => handleInputChange(field.name, e.target.value)}
+                className="min-h-[400px] border-none shadow-none bg-transparent resize-none text-base leading-relaxed placeholder:text-muted-foreground/50 focus-visible:ring-0 focus-visible:ring-offset-0 p-0"
+                style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+              />
+              {/* Subtle voice recording button */}
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className={`h-8 px-3 gap-2 ${
+                className={`absolute bottom-2 right-2 h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity ${
                   isRecording && recordingFor === field.name 
-                    ? 'text-red-500 border-red-500 animate-pulse' 
+                    ? 'text-red-500 animate-pulse opacity-100' 
                     : isTranscribing 
-                    ? 'text-blue-500 border-blue-500' 
-                    : ''
+                    ? 'text-blue-500 opacity-100' 
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
                 onClick={() => {
                   if (isRecording && recordingFor === field.name) {
@@ -891,30 +730,11 @@ export default function NewJournalEntryPage() {
                 }
               >
                 {isRecording && recordingFor === field.name ? (
-                  <>
-                    <Square className="h-3 w-3" />
-                    Stop
-                  </>
+                  <Square className="h-4 w-4" />
                 ) : (
-                  <>
-                    <Mic className="h-3 w-3" />
-                    {isTranscribing ? 'Processing...' : 'Voice'}
-                  </>
+                  <Mic className="h-4 w-4" />
                 )}
               </Button>
-            </div>
-            <Textarea
-              id={field.name}
-              placeholder={field.placeholder}
-              value={typeof formData[field.name] === 'string' ? formData[field.name] as string : ''}
-              onChange={(e) => handleInputChange(field.name, e.target.value)}
-              className="min-h-32"
-            />
-            <div className="flex justify-end">
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Type className="h-3 w-3" />
-                {countWords(typeof formData[field.name] === 'string' ? formData[field.name] as string : '')} words
-              </span>
             </div>
           </div>
         );
@@ -1114,6 +934,22 @@ export default function NewJournalEntryPage() {
               Back
             </Button>
             <Button 
+              variant="outline" 
+              onClick={() => router.push('/journal/select-template')}
+              disabled={isSubmitting}
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Select Template
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={handlePhotoUpload}
+              disabled={isSubmitting}
+            >
+              <Image className="mr-2 h-4 w-4" />
+              Upload Photo
+            </Button>
+            <Button 
               onClick={handleSubmit} 
               disabled={isSubmitting || loading}
               className="gap-1"
@@ -1124,84 +960,86 @@ export default function NewJournalEntryPage() {
           </div>
         </header>
         
-        <main className="flex flex-1 flex-col gap-6 p-4 md:p-8 max-w-6xl mx-auto w-full">
+        <main className="flex flex-1 flex-col min-h-0 relative">
           {loading ? (
             <div className="flex justify-center py-10">
               <div className="animate-pulse">Loading template...</div>
             </div>
           ) : template ? (
-            <>
-              <h1 className="text-3xl font-bold">New Journal Entry</h1>
-              
-              <Card className="mb-6">
-                <CardHeader>
-                  <CardTitle>Template: {template.name}</CardTitle>
-                  <CardDescription>{template.description}</CardDescription>
-                </CardHeader>
-              </Card>
-              
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="title">Entry Title <span className="text-destructive">*</span></Label>
-                  <div className="relative">
-                    <Input
-                      id="title"
-                      placeholder="Enter a title for your journal entry"
-                      value={formData.title || ''}
-                      onChange={(e) => handleInputChange('title', e.target.value)}
-                      className="pr-12"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className={`absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 p-0 ${
-                        isRecording && recordingFor === 'title' 
-                          ? 'text-red-500 animate-pulse' 
-                          : isTranscribing 
-                          ? 'text-blue-500' 
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                      onClick={() => {
-                        if (isRecording && recordingFor === 'title') {
-                          stopRecording();
-                        } else if (!isRecording && !isTranscribing) {
-                          startRecording('title');
-                        }
-                      }}
-                      disabled={isTranscribing || (isRecording && recordingFor !== 'title')}
-                      title={
-                        isRecording && recordingFor === 'title' 
-                          ? 'Stop recording' 
-                          : isTranscribing 
-                          ? 'Processing...' 
-                          : 'Start recording'
+            <div className="flex flex-1 flex-col min-h-0">
+              {/* Title Input - Clean and prominent */}
+              <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 md:p-8 pb-4">
+                <div className="relative max-w-4xl mx-auto">
+                  <Input
+                    id="title"
+                    placeholder="Title"
+                    value={formData.title || ''}
+                    onChange={(e) => handleInputChange('title', e.target.value)}
+                    className="text-3xl font-bold border-none shadow-none bg-transparent px-0 py-2 placeholder:text-muted-foreground/70 focus-visible:ring-0 focus-visible:ring-offset-0"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className={`absolute right-0 top-1/2 -translate-y-1/2 h-8 w-8 p-0 ${
+                      isRecording && recordingFor === 'title' 
+                        ? 'text-red-500 animate-pulse' 
+                        : isTranscribing 
+                        ? 'text-blue-500' 
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                    onClick={() => {
+                      if (isRecording && recordingFor === 'title') {
+                        stopRecording();
+                      } else if (!isRecording && !isTranscribing) {
+                        startRecording('title');
                       }
-                    >
-                      {isRecording && recordingFor === 'title' ? (
-                        <Square className="h-4 w-4" />
-                      ) : (
-                        <Mic className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-                
-                {template.fields.map(field => renderField(field))}
-                
-                <div className="flex justify-end">
-                  <Button 
-                    onClick={handleSubmit} 
-                    disabled={isSubmitting}
-                    size="lg"
-                    className="gap-1"
+                    }}
+                    disabled={isTranscribing || (isRecording && recordingFor !== 'title')}
+                    title={
+                      isRecording && recordingFor === 'title' 
+                        ? 'Stop recording' 
+                        : isTranscribing 
+                        ? 'Processing...' 
+                        : 'Record title'
+                    }
                   >
-                    <Save className="h-4 w-4" />
-                    {isSubmitting ? 'Saving...' : 'Save Journal Entry'}
+                    {isRecording && recordingFor === 'title' ? (
+                      <Square className="h-4 w-4" />
+                    ) : (
+                      <Mic className="h-4 w-4" />
+                    )}
                   </Button>
                 </div>
               </div>
-            </>
+
+              {/* Main Content Area - Clean canvas */}
+              <div className="flex-1 p-4 md:p-8 max-w-4xl mx-auto w-full min-h-0">
+                <div className="space-y-6">
+                  {template.fields.map(field => renderField(field))}
+                </div>
+              </div>
+
+
+              {/* Subtle bottom actions */}
+              <div className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 md:p-8 pt-4">
+                <div className="max-w-4xl mx-auto flex justify-between items-center">
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm text-muted-foreground">
+                      {countWords(typeof formData.content === 'string' ? formData.content as string : '')} words
+                    </span>
+                  </div>
+                  <Button 
+                    onClick={handleSubmit} 
+                    disabled={isSubmitting}
+                    className="gap-1"
+                  >
+                    <Save className="h-4 w-4" />
+                    {isSubmitting ? 'Saving...' : 'Save'}
+                  </Button>
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="flex justify-center py-10">
               <p>Template not found. <Link href="/journal/select-template" className="text-primary underline">Select a different template</Link></p>

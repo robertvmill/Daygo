@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Sparkles, Zap, Users, Crown, ArrowLeft, RefreshCw } from "lucide-react";
+import { Check, Sparkles, Zap, Crown, ArrowLeft, RefreshCw } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbLink } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
@@ -59,7 +59,6 @@ export default function UpgradePage() {
     
     const success = searchParams.get('success');
     const canceled = searchParams.get('canceled');
-    const sessionId = searchParams.get('session_id');
 
     if (success === 'true') {
       toast.success('🎉 Welcome to Pro! Your subscription has been activated.');
@@ -180,9 +179,7 @@ export default function UpgradePage() {
     }
   };
 
-  const handleUpgradeToTeam = () => {
-    toast.info('Team plan coming soon! Contact support for early access.');
-  };
+
 
   const handleRefreshSubscription = async () => {
     setLoading(true);
@@ -274,7 +271,7 @@ export default function UpgradePage() {
           )}
 
           {/* Pricing Cards */}
-          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto w-full">
+          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto w-full">
             {/* Free Plan */}
             <Card className={`relative ${subscription?.tier === 'free' ? 'ring-2 ring-primary' : ''}`}>
               <CardHeader>
@@ -380,57 +377,7 @@ export default function UpgradePage() {
               </CardContent>
             </Card>
 
-            {/* Team Plan */}
-            <Card className={`relative ${subscription?.tier === 'team' ? 'ring-2 ring-primary' : ''}`}>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-xl">Team</CardTitle>
-                  {subscription?.tier === 'team' && (
-                    <Badge variant="default">Current Plan</Badge>
-                  )}
-                </div>
-                <CardDescription>For families & teams</CardDescription>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-bold">${PRICING.team.price}</span>
-                  <span className="text-muted-foreground">/month</span>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <ul className="space-y-3">
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-green-500" />
-                    <span className="text-sm">Everything in Pro</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-green-500" />
-                    <span className="text-sm font-medium">
-                      <Users className="h-3 w-3 inline mr-1" />
-                      Collaborative journaling
-                    </span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-green-500" />
-                    <span className="text-sm">Team templates</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-green-500" />
-                    <span className="text-sm">Admin controls</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-green-500" />
-                    <span className="text-sm">Advanced analytics</span>
-                  </li>
-                </ul>
-                <Button 
-                  onClick={handleUpgradeToTeam}
-                  variant="outline"
-                  className="w-full"
-                  disabled={subscription?.tier === 'team'}
-                >
-                  {subscription?.tier === 'team' ? 'Current Plan' : 'Coming Soon'}
-                </Button>
-              </CardContent>
-            </Card>
+
           </div>
 
           {/* FAQ Section */}

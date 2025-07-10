@@ -14,8 +14,12 @@ export function SearchForm() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (searchTerm.trim()) {
-      // In a real app you would implement actual search functionality
-      // For now, just navigate to the journal page
+      // Navigate to journal page with search query
+      router.push(`/journal?search=${encodeURIComponent(searchTerm.trim())}`)
+      // Clear the search input after submitting
+      setSearchTerm("")
+    } else {
+      // Navigate to journal page without search
       router.push("/journal")
     }
   }
