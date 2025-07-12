@@ -6,6 +6,7 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/co
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   BotIcon, 
   SendIcon, 
@@ -53,6 +54,10 @@ interface TextPart {
   text: string;
 }
 
+interface StepStartPart {
+  type: 'step-start';
+}
+
 interface WeatherResult {
   location: string;
   temperature: number;
@@ -77,7 +82,7 @@ interface JournalSearchResult {
   error?: string;
 }
 
-type MessagePart = TextPart | ToolInvocationPart | ToolResultPart;
+type MessagePart = TextPart | ToolInvocationPart | ToolResultPart | StepStartPart;
 
 // Beautiful animated loading component for journal search
 const JournalSearchAnimation = () => {
@@ -180,7 +185,7 @@ const ChatBubbleMessage = ({
 }) => {
   return (
     <div
-      className={`rounded-lg p-4 max-w-[85%] ${
+      className={`rounded-lg p-3 w-full ${
         variant === "sent" 
           ? "bg-primary/90 text-primary-foreground" 
           : "bg-muted/50 border border-border/30"
@@ -342,6 +347,9 @@ export default function AiChatPage() {
   // Get current user from Firebase
   const [userId, setUserId] = useState<string | null>(null);
   
+  // Model selection state
+  const [selectedModel, setSelectedModel] = useState('gpt-4o-mini');
+  
   // Speech recognition hook
   const { isListening, transcript, startListening, stopListening, resetTranscript, isTranscribing } = useSpeechRecognition();
   
@@ -396,6 +404,7 @@ export default function AiChatPage() {
     maxSteps: 5,
     body: {
       userId: userId, // Pass the user ID to the API
+      model: selectedModel, // Pass the selected model to the API
     },
     onError: (err) => {
       console.error("Chat error occurred:", err);
@@ -516,19 +525,31 @@ export default function AiChatPage() {
 
   // Render different types of message parts (text, tool invocations, tool results)
   const renderMessagePart = (message: Message, part: MessagePart, index: number) => {
+    // Skip step-start parts entirely - these are internal AI SDK debug messages
+    if (part.type === 'step-start') {
+      return null;
+    }
+    
     switch (part.type) {
       case 'text':
         // Filter out debug text that shouldn't be shown to users
-        const text = part.text.trim();
+        let text = part.text.trim();
+        
+        // Remove any debug JSON patterns from the text
+        text = text
+          .replace(/\{"type":"step-start"\}/g, '')
+          .replace(/\{"type":"[^"]*"\}/g, '')
+          .replace(/^\s*\{"[^"]*":\s*"[^"]*"\}\s*$/gm, '')
+          .replace(/\{"type":"step-start"\}/g, '')
+          .trim();
+        
+        // If the text is empty or only contains debug info, don't render
         if (
-          text.includes('"type":"step-start"') || 
-          text === '{"type":"step-start"}' ||
+          text === '' ||
+          text.includes('"type":"step-start"') ||
           text.includes('step-start') ||
           text.startsWith('{"type":') ||
-          text === '' ||
-          text.startsWith('{') && text.endsWith('}') && text.includes('"type"') ||
-          /^\s*\{"type":\s*"[^"]*"\}\s*$/.test(text) ||
-          /^\s*\{"type":\s*"step-start"\}\s*$/.test(text)
+          (text.startsWith('{') && text.endsWith('}') && text.includes('"type"'))
         ) {
           return null;
         }
@@ -553,7 +574,7 @@ export default function AiChatPage() {
                 blockquote: ({ children }) => <blockquote className="border-l-4 border-primary/50 pl-4 italic">{children}</blockquote>,
               }}
             >
-              {part.text}
+              {text}
             </ReactMarkdown>
           </div>
         );
@@ -639,6 +660,18 @@ export default function AiChatPage() {
                 Your personal AI assistant that knows your journal entries and can provide insights.
               </p>
             </div>
+            <div className="flex items-center gap-2">
+              <Select value={selectedModel} onValueChange={setSelectedModel}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Select AI model" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
+                  <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
+                  <SelectItem value="gpt-4o">GPT-4o</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           
           {/* Chat interface */}
@@ -668,7 +701,7 @@ export default function AiChatPage() {
                         {message.role === 'user' ? 'You' : 'AI'}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex-1 max-w-[85%]">
+                    <div className="flex-1 max-w-[70%]">
                       <ChatBubbleMessage
                         variant={message.role === 'user' ? 'sent' : 'received'}
                       >
@@ -737,7 +770,7 @@ export default function AiChatPage() {
             {/* Message input form with speech-to-text */}
             <div className="sticky bottom-0 bg-background/80 backdrop-blur-sm pt-2 pb-4">
               <form onSubmit={handleSubmit} className="flex flex-col gap-2">
-                <div className="relative rounded-lg border bg-background focus-within:ring-1 focus-within:ring-ring">
+                <div className="relative rounded-lg border bg-background focus-within:ring-1 focus-within:ring-ring w-full">
                   <Textarea
                     placeholder={
                       isTranscribing 

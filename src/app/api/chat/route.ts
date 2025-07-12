@@ -1,4 +1,5 @@
 import { openai } from '@ai-sdk/openai';
+import { createOpenAI } from '@ai-sdk/openai';
 import { streamText, tool } from 'ai';
 import { z } from 'zod';
 // Import the real search function
@@ -42,12 +43,14 @@ export const maxDuration = 30;
 
 export async function POST(req: Request) {
   try {
-    const { messages, userId } = await req.json();
+    const { messages, userId, model = 'openai/gpt-4o' } = await req.json();
     
-    // Check if API key is configured
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey || apiKey.includes('your_') || apiKey === 'your-api-key-here') {
-      console.warn('No valid OpenAI API key found. Using fallback response mode.');
+    // Check if API key is configured - try OpenRouter first, then fall back to OpenAI
+    const openRouterApiKey = process.env.OPENROUTER_API_KEY;
+    const openAIApiKey = process.env.OPENAI_API_KEY;
+    
+    if (!openRouterApiKey && (!openAIApiKey || openAIApiKey.includes('your_') || openAIApiKey === 'your-api-key-here')) {
+      console.warn('No valid API key found. Using fallback response mode.');
       
       // Create a fallback assistant message that acknowledges the missing API key
       return new Response(
@@ -60,7 +63,7 @@ export async function POST(req: Request) {
             index: 0,
             message: {
               role: 'assistant',
-              content: `I'd like to respond to your message, but there seems to be a configuration issue. The OpenAI API key is missing or invalid. Please check your environment configuration and try again later.`
+              content: `I'd like to respond to your message, but there seems to be a configuration issue. The API key is missing or invalid. Please check your environment configuration and try again later.`
             },
             finish_reason: 'stop'
           }]
@@ -82,39 +85,16 @@ export async function POST(req: Request) {
       });
     }
 
-    // Filter out debug messages from the messages array
-    const cleanMessages = messages.map(message => {
-      if (message.role === 'assistant' && message.content) {
-        // Remove debug JSON objects and step-start messages
-        const cleanContent = message.content
-          .replace(/\{"type":"step-start"\}/g, '')
-          .replace(/\{"type":"[^"]*"\}/g, '')
-          .replace(/^\s*\{"[^"]*":\s*"[^"]*"\}\s*$/gm, '')
-          .trim();
-        return { ...message, content: cleanContent };
-      }
-      return message;
-    });
+    // Use messages as-is since filtering is handled in frontend
+    const cleanMessages = messages;
+
+    // For now, use OpenAI directly since OpenRouter requires credits
+    // TODO: Re-enable OpenRouter once credits are added or free models are confirmed
+    const aiModel = openai(model);
 
     const result = streamText({
-      model: openai('gpt-4o'),
+      model: aiModel,
       messages: cleanMessages,
-      experimental_transform: (chunk) => {
-        // Filter out debug messages from the stream
-        if (chunk.type === 'text-delta' && chunk.textDelta) {
-          // Remove step-start and other debug JSON objects
-          const cleanText = chunk.textDelta
-            .replace(/\{"type":"step-start"\}/g, '')
-            .replace(/\{"type":"[^"]*"\}/g, '')
-            .replace(/^\s*\{"[^"]*":\s*"[^"]*"\}\s*$/gm, '');
-          
-          return {
-            ...chunk,
-            textDelta: cleanText
-          };
-        }
-        return chunk;
-      },
       tools: {
         weather: tool({
           description: 'Get the weather in a location (fahrenheit)',
