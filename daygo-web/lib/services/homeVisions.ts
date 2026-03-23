@@ -50,7 +50,7 @@ export const homeVisionsService = {
           user_id: userId,
           title: vision.title,
           subtitle: vision.subtitle ?? null,
-          pillars: JSON.stringify(vision.pillars),
+          pillars: vision.pillars,
           rule_title: vision.rule_title ?? null,
           rule_text: vision.rule_text ?? null,
           updated_at: new Date().toISOString(),

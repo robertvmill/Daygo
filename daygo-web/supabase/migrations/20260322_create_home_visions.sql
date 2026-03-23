@@ -19,4 +19,6 @@ alter table home_visions enable row level security;
 
 -- Policy: Users can only access their own home vision
 create policy "Users can manage their own home vision"
-  on home_visions for all using (auth.uid() = user_id);
+  on home_visions for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
