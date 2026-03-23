@@ -90,6 +90,7 @@ import { SortableHabitCard } from '@/components/SortableHabitCard'
 import { SortableMantraCard } from '@/components/SortableMantraCard'
 import { MantraCard } from '@/components/MantraCard'
 import { SortableVisionCard } from '@/components/SortableVisionCard'
+import { HomeVisionSection } from '@/components/HomeVisionSection'
 import { SortableIdentityCard } from '@/components/SortableIdentityCard'
 import { SortableTodoCard } from '@/components/SortableTodoCard'
 import { SortableJournalCard, JOURNAL_ICON_OPTIONS, JOURNAL_COLOR_OPTIONS } from '@/components/SortableJournalCard'
@@ -267,51 +268,12 @@ export default function TodayPage() {
   const [newExpenseCategory, setNewExpenseCategory] = useState<ExpenseCategory>('Food')
   const [newExpenseDescription, setNewExpenseDescription] = useState('')
   const [showExpenseList, setShowExpenseList] = useState(false)
-  const [expandedGoal, setExpandedGoal] = useState<number | null>(null)
   const [expandedKeyFocus, setExpandedKeyFocus] = useState<number | null>(null)
   const [reflectionAnswer, setReflectionAnswer] = useState<boolean | null>(null)
   const [reflectionReason, setReflectionReason] = useState('')
   const [reflectionSaved, setReflectionSaved] = useState(false)
   const [newGiftIdea, setNewGiftIdea] = useState('')
   const [showGiftIdeas, setShowGiftIdeas] = useState(false)
-  const [celebratingHabitKeys, setCelebratingHabitKeys] = useState<Set<string>>(new Set())
-  const [mitChecked, setMitChecked] = useState<Record<string, boolean>>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        return JSON.parse(localStorage.getItem(`daygo-mit-${formatDate(selectedDate)}`) || '{}')
-      } catch { return {} }
-    }
-    return {}
-  })
-  // Sync mitChecked to localStorage and reset on date change
-  useEffect(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem(`daygo-mit-${formatDate(selectedDate)}`) || '{}')
-      setMitChecked(stored)
-    } catch { setMitChecked({}) }
-  }, [selectedDate])
-  useEffect(() => {
-    localStorage.setItem(`daygo-mit-${formatDate(selectedDate)}`, JSON.stringify(mitChecked))
-  }, [mitChecked, selectedDate])
-  const toggleMit = (key: string, e: React.MouseEvent) => {
-    const willCheck = !mitChecked[key]
-    setMitChecked(prev => ({ ...prev, [key]: willCheck }))
-    if (willCheck) {
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-      const x = (rect.left + 10) / window.innerWidth
-      const y = (rect.top + 10) / window.innerHeight
-      const colorSets: Record<string, string[]> = {
-        k: ['#6366f1', '#818cf8', '#3b82f6', '#93c5fd'],
-        e: ['#f59e0b', '#fbbf24', '#f97316', '#fdba74'],
-        n: ['#a855f7', '#c084fc', '#7c3aed', '#d8b4fe'],
-      }
-      const prefix = key.split('-')[0]
-      confetti({ particleCount: 30, spread: 60, origin: { x, y }, startVelocity: 18, gravity: 0.8, scalar: 0.7, ticks: 50, colors: colorSets[prefix] || colorSets.k })
-      setCelebratingHabitKeys(prev => new Set(prev).add(key))
-      setTimeout(() => setCelebratingHabitKeys(prev => { const next = new Set(prev); next.delete(key); return next }), 600)
-    }
-  }
-
   // Section collapse/expand state
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => {
     if (typeof window !== 'undefined') {
@@ -1225,6 +1187,14 @@ export default function TodayPage() {
 
   const reorderHabitsMutation = useMutation({
     mutationFn: (orderedIds: string[]) => habitsService.reorderHabits(orderedIds),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['habits'] })
+    },
+  })
+
+  const toggleHabitMutation = useMutation({
+    mutationFn: ({ habitId, completed }: { habitId: string; completed: boolean }) =>
+      habitsService.toggleHabitCompletion(user!.id, habitId, dateStr, completed),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['habits'] })
     },
@@ -2165,118 +2135,9 @@ export default function TodayPage() {
         </button>
       </div>
 
-      {/* 2026 Roadmap - bertmill19 */}
-      {user?.email === 'bertmill19@gmail.com' && (
-        <div className="mb-10 space-y-4">
-          <div className="rounded-2xl bg-gradient-to-br from-amber-500 via-orange-500 to-red-500 p-[2px]">
-            <div className="rounded-2xl bg-white dark:bg-slate-900 p-5">
-              <div className="flex items-center gap-2 mb-2">
-                <Flame className="w-5 h-5 text-orange-500" />
-                <h2 className="text-lg font-extrabold text-bevel-text dark:text-white tracking-tight uppercase">2026 Roadmap</h2>
-              </div>
-              <p className="text-xs text-bevel-text-secondary dark:text-slate-400 mb-4">These are the only two pillars. Everything else gets cut.</p>
-              <div className="space-y-3">
-                {/* Pillar 1 - $200K AI Engineer */}
-                <div className="rounded-xl border border-emerald-200/60 dark:border-emerald-500/20 overflow-hidden">
-                  <button
-                    onClick={() => setExpandedGoal(expandedGoal === 1 ? null : 1)}
-                    className="w-full flex items-center gap-3 p-3 hover:bg-emerald-50/50 dark:hover:bg-emerald-500/5 transition-colors"
-                  >
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-black text-sm shadow-lg">1</div>
-                    <div className="flex-1 text-left">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500 dark:text-emerald-400 mb-0.5">AI Engineer</p>
-                      <p className="font-extrabold text-bevel-text dark:text-white text-[15px] leading-snug">
-                        By December 2026, land a job as an AI Engineer for $200K&ndash;$300K
-                      </p>
-                    </div>
-                    <ChevronDown className={`w-4 h-4 text-bevel-text-secondary transition-transform ${expandedGoal === 1 ? 'rotate-180' : ''}`} />
-                  </button>
-                  {expandedGoal === 1 && (
-                    <div className="px-3 pb-3 pl-14 space-y-2">
-                      <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">The only way to do that is to have the best portfolio ever. Rate.</p>
-                      {[
-                        { key: 'hp-1-0', label: 'Build the best AI engineering portfolio in the world' },
-                        { key: 'hp-1-1', label: 'Produce an AI tutorial every single day' },
-                        { key: 'hp-1-2', label: '10 best possible Agentic AI projects in your portfolio' },
-                        { key: 'hp-1-3', label: 'Send portfolio to a company every week for feedback' },
-                        { key: 'hp-1-4', label: 'Wide opportunity net — teach AI at community events' },
-                      ].map(item => (
-                        <button key={item.key} onClick={(e) => toggleMit(item.key, e)} className="w-full flex items-center gap-2.5 group">
-                          <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                            mitChecked[item.key] ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 dark:border-slate-600 group-hover:border-emerald-400'
-                          } ${celebratingHabitKeys.has(item.key) ? 'animate-habit-celebrate' : ''}`}>
-                            {mitChecked[item.key] && <Check className="w-3 h-3 text-white" />}
-                          </div>
-                          <p className={`text-sm text-left ${
-                            mitChecked[item.key] ? 'text-bevel-text-secondary dark:text-slate-500 line-through' : 'text-bevel-text dark:text-slate-300'
-                          } ${celebratingHabitKeys.has(item.key) ? 'animate-habit-text-flash' : ''}`}>
-                            {item.label}
-                          </p>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Pillar 2 - Hyrox Elite 15 */}
-                <div className="rounded-xl border border-sky-200/60 dark:border-sky-500/20 overflow-hidden">
-                  <button
-                    onClick={() => setExpandedGoal(expandedGoal === 2 ? null : 2)}
-                    className="w-full flex items-center gap-3 p-3 hover:bg-sky-50/50 dark:hover:bg-sky-500/5 transition-colors"
-                  >
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center text-white font-black text-sm shadow-lg">2</div>
-                    <div className="flex-1 text-left">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-sky-500 dark:text-sky-400 mb-0.5">Hyrox Worlds</p>
-                      <p className="font-extrabold text-bevel-text dark:text-white text-[15px] leading-snug">
-                        Make it to the Hyrox Worlds in Sweden in June with Katie
-                      </p>
-                    </div>
-                    <ChevronDown className={`w-4 h-4 text-bevel-text-secondary transition-transform ${expandedGoal === 2 ? 'rotate-180' : ''}`} />
-                  </button>
-                  {expandedGoal === 2 && (
-                    <div className="px-3 pb-3 pl-14 space-y-2">
-                      <p className="text-sm font-semibold text-sky-600 dark:text-sky-400">Train like an Olympian every day for the next three months.</p>
-                      {[
-                        { key: 'hp-5-0', label: 'Train like an Olympian every single day' },
-                        { key: 'hp-5-1', label: 'Qualify for Hyrox Worlds in Sweden' },
-                        { key: 'hp-5-2', label: 'Push your body to its absolute limit with Katie' },
-                      ].map(item => (
-                        <button key={item.key} onClick={(e) => toggleMit(item.key, e)} className="w-full flex items-center gap-2.5 group">
-                          <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                            mitChecked[item.key] ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 dark:border-slate-600 group-hover:border-sky-400'
-                          } ${celebratingHabitKeys.has(item.key) ? 'animate-habit-celebrate' : ''}`}>
-                            {mitChecked[item.key] && <Check className="w-3 h-3 text-white" />}
-                          </div>
-                          <p className={`text-sm text-left ${
-                            mitChecked[item.key] ? 'text-bevel-text-secondary dark:text-slate-500 line-through' : 'text-bevel-text dark:text-slate-300'
-                          } ${celebratingHabitKeys.has(item.key) ? 'animate-habit-text-flash' : ''}`}>
-                            {item.label}
-                          </p>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Pillar 6 - The Rule: Cut Everything Else */}
-                <div className="rounded-xl border border-red-200/60 dark:border-red-500/20 overflow-hidden bg-red-50/30 dark:bg-red-500/5">
-                  <div className="flex items-center gap-3 p-3">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-red-400 to-rose-500 flex items-center justify-center text-white shadow-lg"><X className="w-4 h-4" /></div>
-                    <div className="flex-1 text-left">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-red-500 dark:text-red-400 mb-0.5">The Rule</p>
-                      <p className="font-extrabold text-bevel-text dark:text-white text-[15px] leading-snug">
-                        Actively block out everything else
-                      </p>
-                    </div>
-                  </div>
-                  <div className="px-3 pb-3 pl-14">
-                    <p className="text-sm text-bevel-text-secondary dark:text-slate-400">If it&apos;s not one of those two pillars, cut it. This is its own discipline &mdash; actively saying no to everything else is one of the hardest and most important things you can do. Get laser, laser focused.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Editable Home Vision Roadmap */}
+      {user && (
+        <HomeVisionSection userId={user.id} selectedDate={selectedDate} />
       )}
 
 
@@ -2932,6 +2793,7 @@ export default function TodayPage() {
                           key={habit.id}
                           habit={habit}
                           onEdit={(h) => setSelectedHabit(h)}
+                          onToggle={(habitId, completed) => toggleHabitMutation.mutate({ habitId, completed })}
                         />
                       ))}
                     </div>

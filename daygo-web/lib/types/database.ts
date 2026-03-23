@@ -273,6 +273,41 @@ export interface Database {
           created_at?: string;
         };
       };
+      home_visions: {
+        Row: {
+          id: string;
+          user_id: string;
+          title: string;
+          subtitle: string | null;
+          pillars: any;
+          rule_title: string | null;
+          rule_text: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          title?: string;
+          subtitle?: string | null;
+          pillars?: any;
+          rule_title?: string | null;
+          rule_text?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          title?: string;
+          subtitle?: string | null;
+          pillars?: any;
+          rule_title?: string | null;
+          rule_text?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       visions: {
         Row: {
           id: string;
