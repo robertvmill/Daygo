@@ -127,6 +127,10 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
       setIsEditing(false)
       setEditData(null)
     },
+    onError: (error: any) => {
+      console.error('Failed to save home vision:', error)
+      alert('Failed to save: ' + (error?.message || 'Unknown error'))
+    },
   })
 
   const deleteMutation = useMutation({
