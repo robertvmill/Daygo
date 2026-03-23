@@ -67,11 +67,14 @@ export function SortableIdentityCard({ identity, onEdit }: SortableIdentityCardP
           <User className="w-6 h-6 text-pink-500" />
         </div>
         <div className="flex-1">
-          <span className="text-xs font-semibold text-pink-500 uppercase tracking-wide">I live the lifestyle of</span>
-          <div
-            className="text-bevel-text dark:text-white prose prose-sm dark:prose-invert max-w-none [&_p]:m-0 font-medium leading-relaxed mt-1"
-            dangerouslySetInnerHTML={{ __html: identity.text }}
-          />
+          <span className="text-xs font-semibold text-pink-500 uppercase tracking-wide">Will I live the lifestyle of</span>
+          <div className="flex items-end gap-0">
+            <div
+              className="text-bevel-text dark:text-white prose prose-sm dark:prose-invert max-w-none [&_p]:m-0 font-medium leading-relaxed mt-1"
+              dangerouslySetInnerHTML={{ __html: identity.text }}
+            />
+            <span className="text-pink-500 font-semibold">?</span>
+          </div>
         </div>
         <button
           onClick={handleOptionsClick}

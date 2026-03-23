@@ -3646,7 +3646,7 @@ export default function TodayPage() {
                   </div>
                 ) : addType === 'identity' ? (
                   <div className="mb-3">
-                    <p className="text-sm text-pink-500 font-medium mb-2">I live the lifestyle of...</p>
+                    <p className="text-sm text-pink-500 font-medium mb-2">Will I live the lifestyle of...?</p>
                     <textarea
                       value={newItemText}
                       onChange={(e) => setNewItemText(e.target.value)}
@@ -4205,7 +4205,7 @@ export default function TodayPage() {
             {isEditingIdentity ? (
               <>
                 <div className="mb-4">
-                  <p className="text-sm text-pink-500 font-medium mb-2">I live the lifestyle of...</p>
+                  <p className="text-sm text-pink-500 font-medium mb-2">Will I live the lifestyle of...?</p>
                   <textarea
                     value={editIdentityText}
                     onChange={(e) => setEditIdentityText(e.target.value)}
@@ -4241,7 +4241,7 @@ export default function TodayPage() {
             ) : (
               <>
                 <div className="mb-6">
-                  <p className="text-sm text-pink-500 font-medium mb-1">I live the lifestyle of...</p>
+                  <p className="text-sm text-pink-500 font-medium mb-1">Will I live the lifestyle of...?</p>
                   <div
                     className="text-gray-600 dark:text-slate-300 prose prose-sm dark:prose-invert max-w-none [&_p]:m-0"
                     dangerouslySetInnerHTML={{ __html: selectedIdentity.text }}
