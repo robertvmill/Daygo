@@ -1065,6 +1065,52 @@ export interface Database {
           created_at?: string;
         };
       };
+      benchmark_workouts: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          created_at?: string;
+        };
+      };
+      benchmark_segments: {
+        Row: {
+          id: string;
+          workout_id: string;
+          name: string;
+          metric_label: string;
+          order_index: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          workout_id: string;
+          name: string;
+          metric_label?: string;
+          order_index?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          workout_id?: string;
+          name?: string;
+          metric_label?: string;
+          order_index?: number;
+          created_at?: string;
+        };
+      };
       daily_reflections: {
         Row: {
           id: string;
@@ -1145,6 +1191,33 @@ export type ExpenseCategory = Expense['category'];
 export type GiftIdea = Database['public']['Tables']['gift_ideas']['Row'];
 export type PushupLog = Database['public']['Tables']['pushup_logs']['Row'];
 export type DailyReflection = Database['public']['Tables']['daily_reflections']['Row'];
+export type BenchmarkWorkout = Database['public']['Tables']['benchmark_workouts']['Row'];
+export type BenchmarkSegment = Database['public']['Tables']['benchmark_segments']['Row'];
+
+export type BenchmarkWorkoutWithSegments = BenchmarkWorkout & {
+  segments: BenchmarkSegment[];
+};
+
+export type BenchmarkAttempt = {
+  id: string;
+  workout_id: string;
+  user_id: string;
+  attempted_at: string;
+  notes: string | null;
+  created_at: string;
+};
+
+export type BenchmarkAttemptValue = {
+  id: string;
+  attempt_id: string;
+  segment_id: string;
+  value: number;
+  created_at: string;
+};
+
+export type BenchmarkAttemptWithValues = BenchmarkAttempt & {
+  values: BenchmarkAttemptValue[];
+};
 
 // Extended types for UI
 export type HabitWithLog = Habit & {
