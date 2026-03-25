@@ -1,11 +1,26 @@
 import { supabase } from '../supabase'
 
+export interface PillarItem {
+  label: string
+  type: 'checkbox' | 'metric'
+  target?: number // daily target for metric items
+}
+
 export interface HomeVisionPillar {
   label: string
   goal: string
   tagline: string
   color: 'emerald' | 'sky' | 'purple' | 'amber' | 'rose'
-  items: string[]
+  items: PillarItem[]
+}
+
+// Helper to normalize legacy string items to PillarItem objects
+export function normalizePillarItems(items: (string | PillarItem)[]): PillarItem[] {
+  return items.map(item =>
+    typeof item === 'string'
+      ? { label: item, type: 'checkbox' as const }
+      : item
+  )
 }
 
 export interface HomeVision {
@@ -39,8 +54,6 @@ export const homeVisionsService = {
       title: string
       subtitle?: string | null
       pillars: HomeVisionPillar[]
-      rule_title?: string | null
-      rule_text?: string | null
     }
   ): Promise<HomeVision> {
     const { data, error } = await (supabase
@@ -51,8 +64,6 @@ export const homeVisionsService = {
           title: vision.title,
           subtitle: vision.subtitle ?? null,
           pillars: JSON.stringify(vision.pillars),
-          rule_title: vision.rule_title ?? null,
-          rule_text: vision.rule_text ?? null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'user_id' }

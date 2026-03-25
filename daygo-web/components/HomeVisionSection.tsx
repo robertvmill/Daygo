@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Flame, ChevronDown, Check, X, Plus, Pencil, Trash2, GripVertical } from 'lucide-react'
-import { homeVisionsService, type HomeVision, type HomeVisionPillar } from '@/lib/services/homeVisions'
+import { Flame, ChevronDown, Check, X, Plus, Pencil, Trash2, Hash, BarChart3 } from 'lucide-react'
+import { homeVisionsService, normalizePillarItems, type HomeVision, type HomeVisionPillar, type PillarItem } from '@/lib/services/homeVisions'
+import { visionChecklistLogsService, type ChecklistState, type VisionChecklistLog } from '@/lib/services/visionChecklistLogs'
 import confetti from 'canvas-confetti'
 
 const PILLAR_COLORS = {
@@ -15,6 +16,8 @@ const PILLAR_COLORS = {
     tagline: 'text-emerald-600 dark:text-emerald-400',
     checkHover: 'group-hover:border-emerald-400',
     checked: 'bg-emerald-500 border-emerald-500',
+    metricBg: 'bg-emerald-50 dark:bg-emerald-500/10',
+    metricRing: 'focus:ring-emerald-500/50',
   },
   sky: {
     border: 'border-sky-200/60 dark:border-sky-500/20',
@@ -24,6 +27,8 @@ const PILLAR_COLORS = {
     tagline: 'text-sky-600 dark:text-sky-400',
     checkHover: 'group-hover:border-sky-400',
     checked: 'bg-sky-500 border-sky-500',
+    metricBg: 'bg-sky-50 dark:bg-sky-500/10',
+    metricRing: 'focus:ring-sky-500/50',
   },
   purple: {
     border: 'border-purple-200/60 dark:border-purple-500/20',
@@ -33,6 +38,8 @@ const PILLAR_COLORS = {
     tagline: 'text-purple-600 dark:text-purple-400',
     checkHover: 'group-hover:border-purple-400',
     checked: 'bg-purple-500 border-purple-500',
+    metricBg: 'bg-purple-50 dark:bg-purple-500/10',
+    metricRing: 'focus:ring-purple-500/50',
   },
   amber: {
     border: 'border-amber-200/60 dark:border-amber-500/20',
@@ -42,6 +49,8 @@ const PILLAR_COLORS = {
     tagline: 'text-amber-600 dark:text-amber-400',
     checkHover: 'group-hover:border-amber-400',
     checked: 'bg-amber-500 border-amber-500',
+    metricBg: 'bg-amber-50 dark:bg-amber-500/10',
+    metricRing: 'focus:ring-amber-500/50',
   },
   rose: {
     border: 'border-rose-200/60 dark:border-rose-500/20',
@@ -51,6 +60,8 @@ const PILLAR_COLORS = {
     tagline: 'text-rose-600 dark:text-rose-400',
     checkHover: 'group-hover:border-rose-400',
     checked: 'bg-rose-500 border-rose-500',
+    metricBg: 'bg-rose-50 dark:bg-rose-500/10',
+    metricRing: 'focus:ring-rose-500/50',
   },
 }
 
@@ -79,37 +90,99 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
     title: string
     subtitle: string
     pillars: HomeVisionPillar[]
-    rule_title: string
-    rule_text: string
   } | null>(null)
 
-  // Daily checklist state (localStorage)
+  const [showProgress, setShowProgress] = useState(false)
+  const [progressRange, setProgressRange] = useState<'week' | 'month' | 'year'>('week')
+
+  // Daily checklist state (Supabase)
   const dateKey = formatDate(selectedDate)
-  const [mitChecked, setMitChecked] = useState<Record<string, boolean>>({})
 
-  useEffect(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem(`daygo-hv-${dateKey}`) || '{}')
-      setMitChecked(stored)
-    } catch { setMitChecked({}) }
-  }, [dateKey])
+  const { data: logState = {} } = useQuery({
+    queryKey: ['visionChecklist', userId, dateKey],
+    queryFn: () => visionChecklistLogsService.getLogsForDate(userId, dateKey),
+    enabled: !!userId,
+  })
 
-  useEffect(() => {
-    if (Object.keys(mitChecked).length > 0) {
-      localStorage.setItem(`daygo-hv-${dateKey}`, JSON.stringify(mitChecked))
-    }
-  }, [mitChecked, dateKey])
+  const toggleMutation = useMutation({
+    mutationFn: ({ pillarIndex, itemIndex, completed }: { pillarIndex: number; itemIndex: number; completed: boolean }) =>
+      visionChecklistLogsService.toggleItem(userId, pillarIndex, itemIndex, dateKey, completed),
+    onMutate: async ({ pillarIndex, itemIndex, completed }) => {
+      const key = `hv-${pillarIndex}-${itemIndex}`
+      const queryKey = ['visionChecklist', userId, dateKey]
+      await queryClient.cancelQueries({ queryKey })
+      const previous = queryClient.getQueryData<Record<string, ChecklistState>>(queryKey)
+      queryClient.setQueryData(queryKey, (old: Record<string, ChecklistState> = {}) => ({
+        ...old,
+        [key]: { ...old[key], completed, value: old[key]?.value ?? null },
+      }))
+      return { previous }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['visionChecklist', userId, dateKey], context.previous)
+      }
+    },
+  })
+
+  const metricMutation = useMutation({
+    mutationFn: ({ pillarIndex, itemIndex, value, target }: { pillarIndex: number; itemIndex: number; value: number; target: number }) =>
+      visionChecklistLogsService.logMetric(userId, pillarIndex, itemIndex, dateKey, value, target),
+    onMutate: async ({ pillarIndex, itemIndex, value, target }) => {
+      const key = `hv-${pillarIndex}-${itemIndex}`
+      const queryKey = ['visionChecklist', userId, dateKey]
+      await queryClient.cancelQueries({ queryKey })
+      const previous = queryClient.getQueryData<Record<string, ChecklistState>>(queryKey)
+      queryClient.setQueryData(queryKey, (old: Record<string, ChecklistState> = {}) => ({
+        ...old,
+        [key]: { completed: value >= target, value },
+      }))
+      return { previous }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['visionChecklist', userId, dateKey], context.previous)
+      }
+    },
+  })
 
   const toggleMit = useCallback((key: string, e: React.MouseEvent) => {
-    const willCheck = !mitChecked[key]
-    setMitChecked((prev: Record<string, boolean>) => ({ ...prev, [key]: willCheck }))
+    const state = logState[key]
+    const willCheck = !state?.completed
+    const parts = key.split('-')
+    const pillarIndex = parseInt(parts[1])
+    const itemIndex = parseInt(parts[2])
+    toggleMutation.mutate({ pillarIndex, itemIndex, completed: willCheck })
     if (willCheck) {
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
       const x = (rect.left + 10) / window.innerWidth
       const y = (rect.top + 10) / window.innerHeight
       confetti({ particleCount: 30, spread: 60, origin: { x, y }, startVelocity: 18, gravity: 0.8, scalar: 0.7, ticks: 50 })
     }
-  }, [mitChecked])
+  }, [logState, toggleMutation])
+
+  const handleMetricChange = useCallback((pillarIndex: number, itemIndex: number, value: number, target: number) => {
+    metricMutation.mutate({ pillarIndex, itemIndex, value, target })
+    if (value >= target) {
+      confetti({ particleCount: 40, spread: 70, startVelocity: 20, gravity: 0.8, scalar: 0.8, ticks: 60 })
+    }
+  }, [metricMutation])
+
+  // Progress data
+  const progressDates = useMemo(() => {
+    const now = new Date(dateKey)
+    const start = new Date(now)
+    if (progressRange === 'week') start.setDate(now.getDate() - 6)
+    else if (progressRange === 'month') start.setDate(now.getDate() - 29)
+    else start.setMonth(0, 1) // Jan 1 of current year
+    return { start: formatDate(start), end: dateKey }
+  }, [dateKey, progressRange])
+
+  const { data: progressLogs = [] } = useQuery({
+    queryKey: ['visionProgress', userId, progressDates.start, progressDates.end],
+    queryFn: () => visionChecklistLogsService.getLogsForRange(userId, progressDates.start, progressDates.end),
+    enabled: !!userId && showProgress,
+  })
 
   const { data: homeVision, isLoading } = useQuery({
     queryKey: ['homeVision', userId],
@@ -138,25 +211,26 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
 
   const startEditing = useCallback(() => {
     if (homeVision) {
-      const pillars = Array.isArray(homeVision.pillars)
+      const rawPillars = Array.isArray(homeVision.pillars)
         ? homeVision.pillars
         : typeof homeVision.pillars === 'string'
           ? JSON.parse(homeVision.pillars)
           : []
+      // Normalize legacy string items to PillarItem objects
+      const pillars = rawPillars.map((p: any) => ({
+        ...p,
+        items: normalizePillarItems(p.items || []),
+      }))
       setEditData({
         title: homeVision.title,
         subtitle: homeVision.subtitle || '',
         pillars: pillars as HomeVisionPillar[],
-        rule_title: homeVision.rule_title || '',
-        rule_text: homeVision.rule_text || '',
       })
     } else {
       setEditData({
-        title: 'My Roadmap',
+        title: 'My Vision',
         subtitle: '',
         pillars: [],
-        rule_title: '',
-        rule_text: '',
       })
     }
     setIsEditing(true)
@@ -168,8 +242,6 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
       title: editData.title,
       subtitle: editData.subtitle || null,
       pillars: editData.pillars,
-      rule_title: editData.rule_title || null,
-      rule_text: editData.rule_text || null,
     })
   }, [editData, upsertMutation])
 
@@ -196,21 +268,24 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
     setEditData({ ...editData, pillars: editData.pillars.filter((_: HomeVisionPillar, i: number) => i !== index) })
   }, [editData])
 
-  const addPillarItem = useCallback((pillarIndex: number) => {
+  const addPillarItem = useCallback((pillarIndex: number, type: 'checkbox' | 'metric') => {
     if (!editData) return
     const newPillars = [...editData.pillars]
+    const newItem: PillarItem = type === 'metric'
+      ? { label: '', type: 'metric', target: 5 }
+      : { label: '', type: 'checkbox' }
     newPillars[pillarIndex] = {
       ...newPillars[pillarIndex],
-      items: [...newPillars[pillarIndex].items, ''],
+      items: [...newPillars[pillarIndex].items, newItem],
     }
     setEditData({ ...editData, pillars: newPillars })
   }, [editData])
 
-  const updatePillarItem = useCallback((pillarIndex: number, itemIndex: number, value: string) => {
+  const updatePillarItem = useCallback((pillarIndex: number, itemIndex: number, updates: Partial<PillarItem>) => {
     if (!editData) return
     const newPillars = [...editData.pillars]
     const newItems = [...newPillars[pillarIndex].items]
-    newItems[itemIndex] = value
+    newItems[itemIndex] = { ...newItems[itemIndex], ...updates }
     newPillars[pillarIndex] = { ...newPillars[pillarIndex], items: newItems }
     setEditData({ ...editData, pillars: newPillars })
   }, [editData])
@@ -220,7 +295,7 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
     const newPillars = [...editData.pillars]
     newPillars[pillarIndex] = {
       ...newPillars[pillarIndex],
-      items: newPillars[pillarIndex].items.filter((_: string, i: number) => i !== itemIndex),
+      items: newPillars[pillarIndex].items.filter((_: PillarItem, i: number) => i !== itemIndex),
     }
     setEditData({ ...editData, pillars: newPillars })
   }, [editData])
@@ -236,7 +311,7 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
           className="w-full py-4 px-4 bg-orange-500/10 hover:bg-orange-500/20 border border-dashed border-orange-500/30 rounded-2xl text-orange-600 dark:text-orange-400 font-medium flex items-center justify-center gap-2 transition-colors"
         >
           <Flame className="w-5 h-5" />
-          Create Your Vision Roadmap
+          Create Your Vision
         </button>
       </div>
     )
@@ -252,7 +327,7 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
         >
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-              {homeVision ? 'Edit Roadmap' : 'Create Roadmap'}
+              {homeVision ? 'Edit Vision' : 'Create Vision'}
             </h2>
             <button
               onClick={() => { setIsEditing(false); setEditData(null) }}
@@ -271,7 +346,7 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
                 value={editData.title}
                 onChange={(e) => setEditData({ ...editData, title: e.target.value })}
                 className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
-                placeholder="2026 Roadmap"
+                placeholder="My Vision"
               />
             </div>
 
@@ -283,7 +358,7 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
                 value={editData.subtitle}
                 onChange={(e) => setEditData({ ...editData, subtitle: e.target.value })}
                 className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
-                placeholder="Focus on what matters most."
+                placeholder="The life I'm building..."
               />
             </div>
 
@@ -313,7 +388,7 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
                       value={pillar.label}
                       onChange={(e) => updatePillar(pi, { label: e.target.value })}
                       className="w-full px-3 py-1.5 text-sm bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
-                      placeholder="Label (e.g. AI Engineer)"
+                      placeholder="Label (e.g. AI GTM Leader)"
                     />
                     <textarea
                       value={pillar.goal}
@@ -351,24 +426,47 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
                     {/* Items */}
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs text-gray-400 dark:text-slate-500">Checklist items</label>
-                        <button
-                          onClick={() => addPillarItem(pi)}
-                          className="text-xs text-orange-500 hover:text-orange-600 font-medium flex items-center gap-0.5"
-                        >
-                          <Plus className="w-3 h-3" /> Add
-                        </button>
+                        <label className="text-xs text-gray-400 dark:text-slate-500">Daily actions</label>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => addPillarItem(pi, 'checkbox')}
+                            className="text-xs text-orange-500 hover:text-orange-600 font-medium flex items-center gap-0.5"
+                          >
+                            <Check className="w-3 h-3" /> Checkbox
+                          </button>
+                          <button
+                            onClick={() => addPillarItem(pi, 'metric')}
+                            className="text-xs text-blue-500 hover:text-blue-600 font-medium flex items-center gap-0.5"
+                          >
+                            <Hash className="w-3 h-3" /> Metric
+                          </button>
+                        </div>
                       </div>
                       <div className="space-y-1.5">
                         {pillar.items.map((item, ii) => (
                           <div key={ii} className="flex items-center gap-1.5">
+                            <span className={`text-[10px] font-bold uppercase w-6 text-center flex-shrink-0 ${
+                              item.type === 'metric' ? 'text-blue-400' : 'text-gray-400'
+                            }`}>
+                              {item.type === 'metric' ? '#' : '✓'}
+                            </span>
                             <input
                               type="text"
-                              value={item}
-                              onChange={(e) => updatePillarItem(pi, ii, e.target.value)}
+                              value={item.label}
+                              onChange={(e) => updatePillarItem(pi, ii, { label: e.target.value })}
                               className="flex-1 px-2 py-1 text-sm bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
-                              placeholder="Checklist item..."
+                              placeholder={item.type === 'metric' ? 'e.g. Prospects reached out to' : 'e.g. Review pipeline'}
                             />
+                            {item.type === 'metric' && (
+                              <input
+                                type="number"
+                                value={item.target ?? 5}
+                                onChange={(e) => updatePillarItem(pi, ii, { target: parseInt(e.target.value) || 1 })}
+                                className="w-14 px-2 py-1 text-sm text-center bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-lg text-blue-700 dark:text-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                                min={1}
+                                title="Daily target"
+                              />
+                            )}
                             <button onClick={() => removePillarItem(pi, ii)} className="p-1 text-red-400 hover:text-red-500 flex-shrink-0">
                               <X className="w-3.5 h-3.5" />
                             </button>
@@ -381,25 +479,6 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
               </div>
             </div>
 
-            {/* Rule */}
-            <div className="border-t border-gray-200 dark:border-slate-700 pt-4">
-              <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Rule title (optional)</label>
-              <input
-                type="text"
-                value={editData.rule_title}
-                onChange={(e) => setEditData({ ...editData, rule_title: e.target.value })}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 mb-2"
-                placeholder="The Rule"
-              />
-              <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Rule description</label>
-              <textarea
-                value={editData.rule_text}
-                onChange={(e) => setEditData({ ...editData, rule_text: e.target.value })}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 resize-none"
-                placeholder="Describe your rule..."
-                rows={3}
-              />
-            </div>
           </div>
 
           {/* Actions */}
@@ -407,7 +486,7 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
             {homeVision && (
               <button
                 onClick={() => {
-                  if (confirm('Delete your roadmap?')) deleteMutation.mutate()
+                  if (confirm('Delete your vision?')) deleteMutation.mutate()
                 }}
                 disabled={deleteMutation.isPending}
                 className="px-4 py-2.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg font-medium text-sm transition-colors"
@@ -438,11 +517,16 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
   // Display mode
   if (!homeVision) return null
 
-  const pillars: HomeVisionPillar[] = Array.isArray(homeVision.pillars)
+  const rawPillars = Array.isArray(homeVision.pillars)
     ? homeVision.pillars
     : typeof homeVision.pillars === 'string'
       ? JSON.parse(homeVision.pillars)
       : []
+
+  const pillars: HomeVisionPillar[] = rawPillars.map((p: any) => ({
+    ...p,
+    items: normalizePillarItems(p.items || []),
+  }))
 
   return (
     <div className="mb-10 space-y-4">
@@ -458,7 +542,7 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
             <button
               onClick={startEditing}
               className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-              title="Edit roadmap"
+              title="Edit vision"
             >
               <Pencil className="w-4 h-4" />
             </button>
@@ -469,6 +553,14 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
           <div className="space-y-3">
             {pillars.map((pillar, index) => {
               const colors = PILLAR_COLORS[pillar.color] || PILLAR_COLORS.emerald
+              // Calculate pillar completion
+              const pillarItems = pillar.items
+              const completedCount = pillarItems.filter((_: PillarItem, ii: number) => {
+                const key = `hv-${index}-${ii}`
+                return logState[key]?.completed
+              }).length
+              const totalCount = pillarItems.length
+
               return (
                 <div key={index} className={`rounded-xl border ${colors.border} overflow-hidden`}>
                   <button
@@ -486,6 +578,11 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
                         {pillar.goal}
                       </p>
                     </div>
+                    {totalCount > 0 && (
+                      <span className={`text-xs font-bold ${completedCount === totalCount ? colors.label : 'text-gray-400 dark:text-slate-500'} mr-1`}>
+                        {completedCount}/{totalCount}
+                      </span>
+                    )}
                     <ChevronDown className={`w-4 h-4 text-bevel-text-secondary transition-transform ${expandedGoal === index ? 'rotate-180' : ''}`} />
                   </button>
                   {expandedGoal === index && (
@@ -495,17 +592,55 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
                       )}
                       {pillar.items.map((item, ii) => {
                         const key = `hv-${index}-${ii}`
+                        const state = logState[key]
+
+                        if (item.type === 'metric') {
+                          const target = item.target ?? 5
+                          const currentValue = state?.value ?? 0
+                          const isComplete = currentValue >= target
+
+                          return (
+                            <div key={key} className="flex items-center gap-2.5">
+                              <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                                isComplete ? colors.checked : `border-slate-300 dark:border-slate-600`
+                              }`}>
+                                {isComplete && <Check className="w-3 h-3 text-white" />}
+                              </div>
+                              <p className={`text-sm flex-1 ${
+                                isComplete ? 'text-bevel-text-secondary dark:text-slate-500' : 'text-bevel-text dark:text-slate-300'
+                              }`}>
+                                {item.label}
+                              </p>
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  value={currentValue || ''}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value) || 0
+                                    handleMetricChange(index, ii, val, target)
+                                  }}
+                                  className={`w-12 px-1.5 py-0.5 text-sm text-center rounded-md border ${colors.metricBg} border-gray-200 dark:border-slate-600 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${colors.metricRing}`}
+                                  min={0}
+                                  placeholder="0"
+                                />
+                                <span className="text-xs text-gray-400 dark:text-slate-500">/ {target}</span>
+                              </div>
+                            </div>
+                          )
+                        }
+
+                        // Checkbox item
                         return (
                           <button key={key} onClick={(e) => toggleMit(key, e)} className="w-full flex items-center gap-2.5 group">
                             <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                              mitChecked[key] ? colors.checked : `border-slate-300 dark:border-slate-600 ${colors.checkHover}`
+                              state?.completed ? colors.checked : `border-slate-300 dark:border-slate-600 ${colors.checkHover}`
                             }`}>
-                              {mitChecked[key] && <Check className="w-3 h-3 text-white" />}
+                              {state?.completed && <Check className="w-3 h-3 text-white" />}
                             </div>
                             <p className={`text-sm text-left ${
-                              mitChecked[key] ? 'text-bevel-text-secondary dark:text-slate-500 line-through' : 'text-bevel-text dark:text-slate-300'
+                              state?.completed ? 'text-bevel-text-secondary dark:text-slate-500 line-through' : 'text-bevel-text dark:text-slate-300'
                             }`}>
-                              {item}
+                              {item.label}
                             </p>
                           </button>
                         )
@@ -516,25 +651,116 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
               )
             })}
 
-            {/* Rule section */}
-            {homeVision.rule_title && (
-              <div className="rounded-xl border border-red-200/60 dark:border-red-500/20 overflow-hidden bg-red-50/30 dark:bg-red-500/5">
-                <div className="flex items-center gap-3 p-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-red-400 to-rose-500 flex items-center justify-center text-white shadow-lg">
-                    <X className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1 text-left">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-red-500 dark:text-red-400 mb-0.5">The Rule</p>
-                    <p className="font-extrabold text-bevel-text dark:text-white text-[15px] leading-snug">
-                      {homeVision.rule_title}
-                    </p>
-                  </div>
+          </div>
+
+          {/* Progress dropdown */}
+          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-slate-800">
+            <button
+              onClick={() => setShowProgress(!showProgress)}
+              className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300 transition-colors"
+            >
+              <BarChart3 className="w-4 h-4" />
+              {showProgress ? 'Hide Progress' : 'View Progress'}
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showProgress ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showProgress && (
+              <div className="mt-3 space-y-4">
+                {/* Range toggle */}
+                <div className="flex justify-center gap-1 p-1 bg-gray-100 dark:bg-slate-800 rounded-lg">
+                  {(['week', 'month', 'year'] as const).map((range) => (
+                    <button
+                      key={range}
+                      onClick={() => setProgressRange(range)}
+                      className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                        progressRange === range
+                          ? 'bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-sm'
+                          : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300'
+                      }`}
+                    >
+                      {range === 'week' ? '7 Days' : range === 'month' ? '30 Days' : 'Year'}
+                    </button>
+                  ))}
                 </div>
-                {homeVision.rule_text && (
-                  <div className="px-3 pb-3 pl-14">
-                    <p className="text-sm text-bevel-text-secondary dark:text-slate-400">{homeVision.rule_text}</p>
-                  </div>
-                )}
+
+                {/* Overall score */}
+                {(() => {
+                  const totalDays = progressRange === 'week' ? 7 : progressRange === 'month' ? 30 : Math.ceil((new Date(dateKey).getTime() - new Date(new Date(dateKey).getFullYear(), 0, 1).getTime()) / 86400000) + 1
+                  const daysWithAnyLog = new Set(progressLogs.filter((l: VisionChecklistLog) => l.completed).map((l: VisionChecklistLog) => l.date)).size
+                  const overallPct = totalDays > 0 ? Math.round((daysWithAnyLog / totalDays) * 100) : 0
+
+                  return (
+                    <div className="text-center py-2">
+                      <p className="text-3xl font-black text-gray-900 dark:text-white">{overallPct}%</p>
+                      <p className="text-xs text-gray-500 dark:text-slate-400">days active ({daysWithAnyLog}/{totalDays} days)</p>
+                    </div>
+                  )
+                })()}
+
+                {/* Per-pillar stats */}
+                {pillars.map((pillar, pi) => {
+                  const colors = PILLAR_COLORS[pillar.color] || PILLAR_COLORS.emerald
+                  const pillarLogs = progressLogs.filter((l: VisionChecklistLog) => l.pillar_index === pi)
+
+                  return (
+                    <div key={pi} className={`rounded-xl border ${colors.border} p-3 space-y-2`}>
+                      <p className={`text-[10px] font-black uppercase tracking-widest ${colors.label}`}>
+                        {pillar.label}
+                      </p>
+                      {pillar.items.map((item, ii) => {
+                        const itemLogs = pillarLogs.filter((l: VisionChecklistLog) => l.item_index === ii)
+                        const completedLogs = itemLogs.filter((l: VisionChecklistLog) => l.completed)
+
+                        if (item.type === 'metric') {
+                          const totalValue = itemLogs.reduce((sum: number, l: VisionChecklistLog) => sum + (l.value ?? 0), 0)
+                          const daysLogged = itemLogs.filter((l: VisionChecklistLog) => (l.value ?? 0) > 0).length
+                          const avg = daysLogged > 0 ? (totalValue / daysLogged).toFixed(1) : '0'
+                          const target = item.target ?? 1
+                          const daysHitTarget = completedLogs.length
+
+                          return (
+                            <div key={ii} className="flex items-center justify-between">
+                              <p className="text-sm text-bevel-text dark:text-slate-300 flex-1">{item.label}</p>
+                              <div className="flex items-center gap-3 text-xs">
+                                <span className="text-gray-500 dark:text-slate-400">
+                                  <span className="font-bold text-gray-900 dark:text-white">{totalValue}</span> total
+                                </span>
+                                <span className="text-gray-500 dark:text-slate-400">
+                                  <span className="font-bold text-gray-900 dark:text-white">{avg}</span>/day avg
+                                </span>
+                                <span className={`font-bold ${daysHitTarget > 0 ? colors.label : 'text-gray-400 dark:text-slate-500'}`}>
+                                  {daysHitTarget}d hit
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        }
+
+                        // Checkbox stats
+                        const daysCompleted = completedLogs.length
+                        const totalDays = progressRange === 'week' ? 7 : progressRange === 'month' ? 30 : Math.ceil((new Date(dateKey).getTime() - new Date(new Date(dateKey).getFullYear(), 0, 1).getTime()) / 86400000) + 1
+                        const pct = totalDays > 0 ? Math.round((daysCompleted / totalDays) * 100) : 0
+
+                        return (
+                          <div key={ii} className="flex items-center justify-between">
+                            <p className="text-sm text-bevel-text dark:text-slate-300 flex-1">{item.label}</p>
+                            <div className="flex items-center gap-2 text-xs">
+                              <div className="w-16 h-1.5 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full bg-gradient-to-r ${colors.gradient}`}
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                              <span className={`font-bold ${pct > 70 ? colors.label : 'text-gray-400 dark:text-slate-500'}`}>
+                                {daysCompleted}d
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
