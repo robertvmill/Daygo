@@ -90,6 +90,7 @@ import { SortableMantraCard } from '@/components/SortableMantraCard'
 import { MantraCard } from '@/components/MantraCard'
 import { SortableVisionCard } from '@/components/SortableVisionCard'
 import { HomeVisionSection } from '@/components/HomeVisionSection'
+import { DailyPlanningScratchpad } from '@/components/DailyPlanningScratchpad'
 import { UniqueEdgeVenn } from '@/components/UniqueEdgeVenn'
 import { SortableIdentityCard } from '@/components/SortableIdentityCard'
 import { SortableTodoCard } from '@/components/SortableTodoCard'
@@ -688,7 +689,7 @@ export default function TodayPage() {
     queryFn: async () => {
       const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession()
       if (!session?.access_token) return []
-      const response = await fetch(`/api/google-calendar/events?date=${dateStr}`, {
+      const response = await fetch(`/api/google-calendar/events?date=${dateStr}&tz=${Intl.DateTimeFormat().resolvedOptions().timeZone}`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       })
       if (!response.ok) {
@@ -1471,7 +1472,7 @@ export default function TodayPage() {
     mutationFn: async () => {
       const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession()
       if (!session?.access_token) throw new Error('Not authenticated')
-      const response = await fetch(`/api/google-calendar/events?date=${dateStr}`, {
+      const response = await fetch(`/api/google-calendar/events?date=${dateStr}&tz=${Intl.DateTimeFormat().resolvedOptions().timeZone}`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       })
       if (!response.ok) throw new Error('Failed to fetch events')
@@ -2191,6 +2192,12 @@ export default function TodayPage() {
         <HomeVisionSection userId={user.id} selectedDate={selectedDate} />
       )}
 
+      <DailyPlanningScratchpad
+        selectedDate={selectedDate}
+        scheduleEvents={scheduleEvents}
+        googleCalendarEvents={googleCalendarEvents as Array<{ id: string; title: string; description?: string | null; start_time: string; end_time: string; is_all_day?: boolean }>}
+      />
+
       {/* Unique Edge — Venn diagram of top 1% strengths */}
       <UniqueEdgeVenn />
 
@@ -2267,7 +2274,23 @@ export default function TodayPage() {
         )}
 
         {isGcalConnected && googleCalendarEvents.length > 0 ? (
-          <div className="space-y-1">
+          <div className="space-y-0">
+            {/* All-day events */}
+            {(googleCalendarEvents as Array<{ id: string; title: string; description?: string | null; start_time: string; end_time: string; is_all_day?: boolean }>)
+              .filter((event) => event.is_all_day)
+              .map((event) => (
+                <div
+                  key={event.id}
+                  className="flex items-center gap-3 py-2 border-b border-slate-100 dark:border-slate-800"
+                >
+                  <div className="w-14 text-right flex-shrink-0">
+                    <span className="text-[10px] font-medium text-slate-300 dark:text-slate-600 uppercase">all day</span>
+                  </div>
+                  <div className="w-px min-h-[16px] bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
+                  <p className="text-sm text-slate-400 dark:text-slate-500 truncate">{event.title}</p>
+                </div>
+              ))}
+            {/* Timed events */}
             {(googleCalendarEvents as Array<{ id: string; title: string; description?: string | null; start_time: string; end_time: string; is_all_day?: boolean }>)
               .filter((event) => !event.is_all_day)
               .sort((a, b) => a.start_time.localeCompare(b.start_time))

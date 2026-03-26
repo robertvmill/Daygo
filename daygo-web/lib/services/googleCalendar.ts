@@ -160,13 +160,12 @@ export const googleCalendarService = {
   },
 
   // Read events from all calendars for a specific date
-  async getEvents(userId: string, date: string): Promise<GoogleCalendarEvent[]> {
+  async getEvents(userId: string, date: string, timeZone: string = 'America/Toronto'): Promise<GoogleCalendarEvent[]> {
     const calendar = await this.getCalendarClient(userId)
 
-    const startOfDay = new Date(date)
-    startOfDay.setHours(0, 0, 0, 0)
-    const endOfDay = new Date(date)
-    endOfDay.setHours(23, 59, 59, 999)
+    // Google Calendar API handles timezone conversion for us
+    const timeMin = `${date}T00:00:00`
+    const timeMax = `${date}T23:59:59`
 
     // Get all calendars
     const calendarList = await calendar.calendarList.list()
@@ -178,8 +177,9 @@ export const googleCalendarService = {
         try {
           const response = await calendar.events.list({
             calendarId: cal.id!,
-            timeMin: startOfDay.toISOString(),
-            timeMax: endOfDay.toISOString(),
+            timeMin,
+            timeMax,
+            timeZone,
             singleEvents: true,
             orderBy: 'startTime',
           })

@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams
     const date = searchParams.get('date')
+    const tz = searchParams.get('tz') || 'America/Toronto'
     if (!date) {
       return NextResponse.json({ error: 'Date is required' }, { status: 400 })
     }
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Google Calendar not connected' }, { status: 400 })
     }
 
-    const events = await googleCalendarService.getEvents(user.id, date)
+    const events = await googleCalendarService.getEvents(user.id, date, tz)
 
     // Transform Google Calendar events to a simpler format
     const transformedEvents = events.map(event => ({
@@ -39,10 +40,10 @@ export async function GET(request: NextRequest) {
       title: event.summary || 'Untitled',
       description: event.description || null,
       start_time: event.start?.dateTime
-        ? new Date(event.start.dateTime).toTimeString().slice(0, 8)
+        ? new Date(event.start.dateTime).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: tz })
         : '00:00:00',
       end_time: event.end?.dateTime
-        ? new Date(event.end.dateTime).toTimeString().slice(0, 8)
+        ? new Date(event.end.dateTime).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: tz })
         : '23:59:59',
       is_all_day: !event.start?.dateTime,
     }))
