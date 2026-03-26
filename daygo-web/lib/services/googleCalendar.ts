@@ -159,26 +159,39 @@ export const googleCalendarService = {
     return google.calendar({ version: 'v3', auth: oauth2Client })
   },
 
-  // Read events from Google Calendar for a specific date
+  // Read events from all calendars for a specific date
   async getEvents(userId: string, date: string): Promise<GoogleCalendarEvent[]> {
     const calendar = await this.getCalendarClient(userId)
-    const tokens = await this.getTokens(userId)
-    const calendarId = tokens?.calendar_id || 'primary'
 
     const startOfDay = new Date(date)
     startOfDay.setHours(0, 0, 0, 0)
     const endOfDay = new Date(date)
     endOfDay.setHours(23, 59, 59, 999)
 
-    const response = await calendar.events.list({
-      calendarId,
-      timeMin: startOfDay.toISOString(),
-      timeMax: endOfDay.toISOString(),
-      singleEvents: true,
-      orderBy: 'startTime',
-    })
+    // Get all calendars
+    const calendarList = await calendar.calendarList.list()
+    const calendars = calendarList.data.items || []
 
-    return (response.data.items || []) as GoogleCalendarEvent[]
+    // Fetch events from all calendars in parallel
+    const allEvents = await Promise.all(
+      calendars.map(async (cal) => {
+        try {
+          const response = await calendar.events.list({
+            calendarId: cal.id!,
+            timeMin: startOfDay.toISOString(),
+            timeMax: endOfDay.toISOString(),
+            singleEvents: true,
+            orderBy: 'startTime',
+          })
+          return (response.data.items || []) as GoogleCalendarEvent[]
+        } catch {
+          // Skip calendars that fail (e.g., no read access)
+          return [] as GoogleCalendarEvent[]
+        }
+      })
+    )
+
+    return allEvents.flat()
   },
 
   // Create event in Google Calendar
