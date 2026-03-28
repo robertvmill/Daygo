@@ -34,4 +34,25 @@ export const dailyNotesService = {
     if (error) throw error
     return data as DailyNote
   },
+
+  async saveBigWins(userId: string, date: string, bigWins: string[]): Promise<DailyNote> {
+    const { data, error } = await supabase
+      .from('daily_notes')
+      .upsert(
+        {
+          user_id: userId,
+          date: date,
+          big_wins: bigWins,
+          updated_at: new Date().toISOString(),
+        } as any,
+        {
+          onConflict: 'user_id,date',
+        }
+      )
+      .select()
+      .single()
+
+    if (error) throw error
+    return data as DailyNote
+  },
 }
