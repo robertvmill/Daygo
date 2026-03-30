@@ -312,7 +312,7 @@ export function DailyPlanningScratchpad({
         </h2>
       </div>
 
-      <div className="bg-[linear-gradient(180deg,rgba(255,253,248,0.92),rgba(248,244,235,0.72))]">
+      <div>
         <div className="px-1 py-1">
           <div className="mb-2.5 flex items-start justify-between gap-4">
             <div>

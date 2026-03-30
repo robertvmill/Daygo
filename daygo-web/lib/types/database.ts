@@ -56,6 +56,7 @@ export interface Database {
           weight: number;
           is_active: boolean;
           sort_order: number;
+          time_of_day: string | null;
           created_at: string;
         };
         Insert: {
@@ -66,6 +67,7 @@ export interface Database {
           weight?: number;
           is_active?: boolean;
           sort_order?: number;
+          time_of_day?: string | null;
           created_at?: string;
         };
         Update: {
@@ -76,6 +78,7 @@ export interface Database {
           weight?: number;
           is_active?: boolean;
           sort_order?: number;
+          time_of_day?: string | null;
           created_at?: string;
         };
       };
@@ -807,6 +810,67 @@ export interface Database {
           reason?: string;
           image_url?: string | null;
           sort_order?: number;
+          created_at?: string;
+        };
+      };
+      meal_library: {
+        Row: {
+          id: string;
+          user_id: string;
+          title: string;
+          description: string | null;
+          image_url: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          title: string;
+          description?: string | null;
+          image_url?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          title?: string;
+          description?: string | null;
+          image_url?: string | null;
+          created_at?: string;
+        };
+      };
+      meal_inspirations: {
+        Row: {
+          id: string;
+          user_id: string;
+          date: string;
+          meal_type: 'lunch' | 'dinner';
+          title: string | null;
+          notes: string | null;
+          meal_image_url: string | null;
+          ingredients_image_url: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          date?: string;
+          meal_type?: 'lunch' | 'dinner';
+          title?: string | null;
+          notes?: string | null;
+          meal_image_url?: string | null;
+          ingredients_image_url?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          date?: string;
+          meal_type?: 'lunch' | 'dinner';
+          title?: string | null;
+          notes?: string | null;
+          meal_image_url?: string | null;
+          ingredients_image_url?: string | null;
           created_at?: string;
         };
       };

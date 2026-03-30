@@ -17,7 +17,7 @@ const PILLAR_COLORS = {
     border: 'border-slate-200/70 dark:border-slate-600/30',
     hoverBg: 'hover:bg-slate-50/80 dark:hover:bg-slate-800/30',
     gradient: 'from-slate-400 via-slate-500 to-slate-600',
-    tint: 'from-slate-50 via-white to-slate-100/60 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/80',
+    tint: 'from-slate-50 via-[#fafaf7] to-slate-100/60 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/80',
     badge: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
     soft: 'bg-slate-50/80 dark:bg-slate-800/50',
     label: 'text-slate-500 dark:text-slate-400',
@@ -30,7 +30,7 @@ const PILLAR_COLORS = {
     border: 'border-slate-200/70 dark:border-slate-600/30',
     hoverBg: 'hover:bg-blue-50/60 dark:hover:bg-blue-950/20',
     gradient: 'from-slate-400 via-blue-400 to-cyan-400',
-    tint: 'from-blue-50 via-white to-cyan-50/60 dark:from-slate-900 dark:via-slate-900 dark:to-blue-950/40',
+    tint: 'from-blue-50 via-[#fafaf7] to-cyan-50/60 dark:from-slate-900 dark:via-slate-900 dark:to-blue-950/40',
     badge: 'bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300',
     soft: 'bg-blue-50/70 dark:bg-blue-950/20',
     label: 'text-blue-500/80 dark:text-blue-300/80',
@@ -43,7 +43,7 @@ const PILLAR_COLORS = {
     border: 'border-slate-200/70 dark:border-slate-600/30',
     hoverBg: 'hover:bg-violet-50/60 dark:hover:bg-violet-950/20',
     gradient: 'from-slate-400 via-violet-400 to-fuchsia-400',
-    tint: 'from-violet-50 via-white to-fuchsia-50/60 dark:from-slate-900 dark:via-slate-900 dark:to-violet-950/30',
+    tint: 'from-violet-50 via-[#fafaf7] to-fuchsia-50/60 dark:from-slate-900 dark:via-slate-900 dark:to-violet-950/30',
     badge: 'bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300',
     soft: 'bg-violet-50/70 dark:bg-violet-950/20',
     label: 'text-violet-500/80 dark:text-violet-300/80',
@@ -56,7 +56,7 @@ const PILLAR_COLORS = {
     border: 'border-slate-200/70 dark:border-slate-600/30',
     hoverBg: 'hover:bg-amber-50/60 dark:hover:bg-amber-950/20',
     gradient: 'from-slate-400 via-amber-400 to-orange-400',
-    tint: 'from-amber-50 via-white to-orange-50/60 dark:from-slate-900 dark:via-slate-900 dark:to-amber-950/30',
+    tint: 'from-amber-50 via-[#fafaf7] to-orange-50/60 dark:from-slate-900 dark:via-slate-900 dark:to-amber-950/30',
     badge: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
     soft: 'bg-amber-50/70 dark:bg-amber-950/20',
     label: 'text-amber-600/80 dark:text-amber-300/80',
@@ -69,7 +69,7 @@ const PILLAR_COLORS = {
     border: 'border-slate-200/70 dark:border-slate-600/30',
     hoverBg: 'hover:bg-rose-50/60 dark:hover:bg-rose-950/20',
     gradient: 'from-slate-400 via-rose-400 to-pink-400',
-    tint: 'from-rose-50 via-white to-pink-50/60 dark:from-slate-900 dark:via-slate-900 dark:to-rose-950/30',
+    tint: 'from-rose-50 via-[#fafaf7] to-pink-50/60 dark:from-slate-900 dark:via-slate-900 dark:to-rose-950/30',
     badge: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
     soft: 'bg-rose-50/70 dark:bg-rose-950/20',
     label: 'text-rose-500/80 dark:text-rose-300/80',
@@ -387,8 +387,8 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
       })
     } else {
       setEditData({
-        title: 'My Vision 2026',
-        subtitle: 'See the distance between where you are and where you are going.',
+        title: 'Become the 2026 leader of Toronto, through fitness, community, and AI',
+        subtitle: 'Connect your highest ambitions to your daily habits.',
         pillars: [],
       })
     }
@@ -749,7 +749,7 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
 
   return (
     <div className="mb-8 space-y-3">
-      <div className="bg-[linear-gradient(180deg,rgba(255,255,255,0.65),rgba(248,250,252,0.35))]">
+      <div className="bg-transparent">
         <div className="px-1 py-1">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div className="space-y-1.5">
@@ -787,16 +787,9 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
                     className={`w-full p-3 ${colors.hoverBg} transition-colors text-left`}
                   >
                     <div className="flex items-start gap-3">
-                      <div className={`flex-shrink-0 w-8 h-8 rounded-[0.95rem] bg-gradient-to-br ${colors.gradient} flex items-center justify-center text-white font-semibold text-sm shadow-sm`}>
-                        {index + 1}
-                      </div>
-
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start gap-3">
                           <div className="flex-1 min-w-0">
-                            <p className={`text-[9px] font-semibold uppercase tracking-[0.24em] ${colors.label} mb-0.5`}>
-                              {pillar.label}
-                            </p>
                             <p className="font-medium text-bevel-text dark:text-white text-[15px] md:text-[1.05rem] leading-tight max-w-3xl">
                               {pillar.goal}
                             </p>
@@ -857,109 +850,12 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
 
                   {expandedGoal === index && (
                     <div className="px-3 pb-3">
-                      <div className="ml-0 md:ml-[3.25rem] border-t border-white/70 dark:border-slate-800 pt-3">
-                        <div className="grid gap-3 md:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)]">
-                          <div className="rounded-[1.05rem] bg-white/45 dark:bg-slate-900/20 p-3 overflow-hidden">
-                            <div className="flex items-start justify-between gap-3 mb-3">
-                              <div>
-                                <div className="flex items-center gap-2 mb-1.5">
-                                  <TrendingUp className="w-4 h-4 text-slate-400" />
-                                  <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">Vision Path</p>
-                                </div>
-                                {pillar.tagline && (
-                                  <p className={`text-[13px] leading-relaxed ${colors.accentText}`}>{pillar.tagline}</p>
-                                )}
-                              </div>
-                              {pillar.target_date && (
-                                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium ${colors.soft} ${colors.accentText}`}>
-                                  {formatCompactDate(pillar.target_date)}
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="rounded-[0.95rem] bg-white/55 dark:bg-slate-950/25 px-2.5 py-2.5">
-                              <div className="relative mb-3">
-                                <svg viewBox="0 0 320 88" className="w-full h-[88px]" aria-hidden="true">
-                                  <path
-                                    d="M18 62 C 70 62, 88 26, 146 26 S 248 62, 302 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    className="text-slate-300 dark:text-slate-700"
-                                    strokeWidth="2"
-                                    strokeDasharray="5 5"
-                                    strokeLinecap="round"
-                                  />
-                                  {progressPercent !== null && (
-                                    <path
-                                      d="M18 62 C 70 62, 88 26, 146 26 S 248 62, 302 24"
-                                      fill="none"
-                                      stroke={`url(#${gradientId})`}
-                                      strokeWidth="4"
-                                      strokeLinecap="round"
-                                      pathLength="100"
-                                      strokeDasharray={`${progressPercent} 100`}
-                                    />
-                                  )}
-                                  <circle cx="18" cy="62" r="8" className="fill-slate-500" />
-                                  <circle cx="302" cy="24" r="8" className="fill-slate-500" />
-                                  {progressPercent !== null && (
-                                    <circle
-                                      cx={18 + ((302 - 18) * progressPercent) / 100}
-                                      cy={62 + ((24 - 62) * progressPercent) / 100}
-                                      r="7"
-                                      className="fill-white dark:fill-slate-900 stroke-slate-500"
-                                      strokeWidth="3"
-                                    />
-                                  )}
-                                  <defs>
-                                    <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
-                                      <stop offset="0%" stopColor="rgb(100 116 139)" />
-                                      <stop offset="100%" stopColor="rgb(51 65 85)" />
-                                    </linearGradient>
-                                  </defs>
-                                </svg>
-                              </div>
-
-                              <div className="grid grid-cols-3 gap-3 text-center">
-                                <div>
-                                  <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">{pillar.current_label || 'Now'}</p>
-                                  <p className="mt-1 text-[14px] font-semibold text-bevel-text dark:text-white">{formatMetricValue(pillar.current_value, pillar.metric_kind)}</p>
-                                </div>
-                                <div>
-                                  <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">Gap</p>
-                                  <p className="mt-1 text-[13px] font-medium text-bevel-text dark:text-white">{formatGapValue(pillar)}</p>
-                                  {progressPercent !== null && (
-                                    <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{Math.round(progressPercent)}% there</p>
-                                  )}
-                                </div>
-                                <div>
-                                  <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">{pillar.target_label || 'Target'}</p>
-                                  <p className="mt-1 text-[14px] font-semibold text-bevel-text dark:text-white">{formatMetricValue(pillar.target_value, pillar.metric_kind)}</p>
-                                </div>
-                              </div>
-                            </div>
-
-                            {(rateText || pillar.target_date) && (
-                              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-                                {rateText && (
-                                  <div className="flex items-center gap-1.5">
-                                    <CalendarClock className="w-3.5 h-3.5" />
-                                    <span>{rateText}</span>
-                                  </div>
-                                )}
-                                {pillar.target_date && (
-                                  <span>Target date: {formatCompactDate(pillar.target_date)}</span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="rounded-[1.05rem] bg-white/45 dark:bg-slate-900/18 p-3">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Target className="w-4 h-4 text-slate-400" />
-                              <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">What It Takes</p>
-                            </div>
-                            <div className="space-y-1.5">
+                      <div className="ml-0 md:ml-[3.25rem] border-t border-white/70 dark:border-slate-800 pt-3 space-y-3">
+                        {pillar.tagline && (
+                          <p className={`text-[13px] leading-relaxed ${colors.accentText}`}>{pillar.tagline}</p>
+                        )}
+                        {actionItems.length > 0 && (
+                          <div className="space-y-1.5">
                             {actionItems.map((item, ii) => {
                               const key = `hv-${index}-${ii}`
                               return (
@@ -977,19 +873,8 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
                                 </button>
                               )
                             })}
-                            {actionItems.length === 0 && (
-                              <p className="text-sm text-slate-400 dark:text-slate-500">Add the concrete actions that bridge this gap.</p>
-                            )}
-                            {actionItems.length > 0 && (
-                              <div className="pt-2">
-                                <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                                  {actionItems.filter((_, ii) => mitChecked[`hv-${index}-${ii}`]).length} of {actionItems.length} actions checked today
-                                </p>
-                              </div>
-                            )}
-                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     </div>
                   )}

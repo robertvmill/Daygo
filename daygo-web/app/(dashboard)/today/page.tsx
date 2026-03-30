@@ -91,6 +91,7 @@ import { MantraCard } from '@/components/MantraCard'
 import { SortableVisionCard } from '@/components/SortableVisionCard'
 import { HomeVisionSection } from '@/components/HomeVisionSection'
 import { DailyPlanningScratchpad } from '@/components/DailyPlanningScratchpad'
+import { DailyTop3 } from '@/components/DailyTop3'
 import { UniqueEdgeVenn } from '@/components/UniqueEdgeVenn'
 import { SortableIdentityCard } from '@/components/SortableIdentityCard'
 import { SortableTodoCard } from '@/components/SortableTodoCard'
@@ -105,7 +106,7 @@ import { TimePicker } from '@/components/TimePicker'
 import { ScoreRing } from '@/components/ScoreRing'
 import { RichTextEditor } from '@/components/RichTextEditor'
 import { PepTalkAudioPlayer } from '@/components/PepTalkAudioPlayer'
-import { HealthyFoodsCard } from '@/components/HealthyFoodsCard'
+import { MealPlanCard } from '@/components/MealPlanCard'
 import type { HabitWithLog, Mantra, Todo, Vision, Identity, JournalPromptWithEntry, ScheduleEvent, CalendarRule, Goal, ScheduleTemplate, AIJournal, Book, Value, Expense, ExpenseCategory, PushupLog } from '@/lib/types/database'
 import { calculateMissionScore } from '@/lib/services/missionScore'
 import confetti from 'canvas-confetti'
@@ -165,6 +166,7 @@ export default function TodayPage() {
   const [isEditingHabit, setIsEditingHabit] = useState(false)
   const [editHabitName, setEditHabitName] = useState('')
   const [editHabitDescription, setEditHabitDescription] = useState('')
+  const [editHabitTimeOfDay, setEditHabitTimeOfDay] = useState('')
   const [selectedMantra, setSelectedMantra] = useState<Mantra | null>(null)
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null)
   const [selectedVision, setSelectedVision] = useState<Vision | null>(null)
@@ -1206,14 +1208,15 @@ export default function TodayPage() {
   })
 
   const updateHabitMutation = useMutation({
-    mutationFn: ({ id, name, description }: { id: string; name: string; description?: string }) =>
-      habitsService.updateHabit(id, { name, description: description || null }),
+    mutationFn: ({ id, name, description, time_of_day }: { id: string; name: string; description?: string; time_of_day?: string }) =>
+      habitsService.updateHabit(id, { name, description: description || null, time_of_day: time_of_day || null }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['habits'] })
       setSelectedHabit(null)
       setIsEditingHabit(false)
       setEditHabitName('')
       setEditHabitDescription('')
+      setEditHabitTimeOfDay('')
     },
   })
 
@@ -2341,6 +2344,11 @@ export default function TodayPage() {
         ) : null}
       </section>
 
+      {/* Daily Top 3 */}
+      {user && (
+        <DailyTop3 userId={user.id} selectedDate={selectedDate} />
+      )}
+
       <DailyPlanningScratchpad
         selectedDate={selectedDate}
         scheduleEvents={scheduleEvents}
@@ -2895,7 +2903,7 @@ export default function TodayPage() {
                 className="w-full flex items-center justify-between mb-4 group cursor-pointer"
               >
                 <h2 className="section-header text-bevel-text-secondary dark:text-slate-400">
-                  Habits <span className="text-habit">({habits.filter(h => h.completed).length}/{habits.length})</span>
+                  Habit Stack <span className="text-habit">({habits.filter(h => h.completed).length}/{habits.length})</span>
                 </h2>
                 {expandedSections.habits ? (
                   <ChevronUp className="w-4 h-4 text-bevel-text-secondary group-hover:text-bevel-text dark:group-hover:text-slate-300 transition-colors" />
@@ -2916,10 +2924,11 @@ export default function TodayPage() {
                         strategy={verticalListSortingStrategy}
                       >
                         <div className="space-y-1.5">
-                          {habits.map((habit) => (
+                          {habits.map((habit, index) => (
                             <SortableHabitCard
                               key={habit.id}
                               habit={habit}
+                              index={index}
                               onEdit={(h) => setSelectedHabit(h)}
                               onToggle={(habitId, completed) => toggleHabitMutation.mutate({ habitId, completed })}
                             />
@@ -3150,7 +3159,7 @@ export default function TodayPage() {
               )}
             </button>
             {expandedSections.healthyFoods && (
-              <HealthyFoodsCard />
+              <MealPlanCard userId={user!.id} selectedDate={selectedDate} />
             )}
           </section>
 
@@ -4004,6 +4013,18 @@ export default function TodayPage() {
                       placeholder="Description..."
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+                      Time of day (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={editHabitTimeOfDay}
+                      onChange={(e) => setEditHabitTimeOfDay(e.target.value)}
+                      className="w-full px-4 py-3 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal"
+                      placeholder="e.g. Morning, 7am, After lunch..."
+                    />
+                  </div>
                 </div>
                 <div className="flex gap-3">
                   <button
@@ -4011,6 +4032,7 @@ export default function TodayPage() {
                       setIsEditingHabit(false)
                       setEditHabitName('')
                       setEditHabitDescription('')
+                      setEditHabitTimeOfDay('')
                     }}
                     className="flex-1 py-3 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-white rounded-lg font-medium transition-colors"
                   >
@@ -4023,6 +4045,7 @@ export default function TodayPage() {
                           id: selectedHabit.id,
                           name: editHabitName,
                           description: editHabitDescription || undefined,
+                          time_of_day: editHabitTimeOfDay || undefined,
                         })
                       }
                     }}
@@ -4061,6 +4084,7 @@ export default function TodayPage() {
                     onClick={() => {
                       setEditHabitName(selectedHabit.name)
                       setEditHabitDescription(selectedHabit.description || '')
+                      setEditHabitTimeOfDay(selectedHabit.time_of_day || '')
                       setIsEditingHabit(true)
                     }}
                     className="w-full py-3 bg-teal/10 hover:bg-teal/20 text-teal rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
