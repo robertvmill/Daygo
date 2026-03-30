@@ -68,7 +68,7 @@ export const mealLibraryService = {
       fileExt = mimeToExt[file.type] || 'png'
     }
 
-    const filePath = `meal-library/${userId}/${Date.now()}.${fileExt}`
+    const filePath = `meals/${userId}/library/${Date.now()}.${fileExt}`
 
     const { error } = await supabase.storage
       .from('food-images')
