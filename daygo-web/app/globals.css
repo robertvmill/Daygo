@@ -124,6 +124,18 @@ body::before {
   animation: habit-text-flash 0.5s ease-out;
 }
 
+/* Identity icon pop-in */
+@keyframes identity-icon-pop {
+  0% { transform: scale(0) rotate(-20deg); opacity: 0; }
+  60% { transform: scale(1.3) rotate(5deg); opacity: 1; }
+  80% { transform: scale(0.9) rotate(-3deg); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.animate-identity-icon-pop {
+  animation: identity-icon-pop 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) forwards;
+}
+
 /* Section header styles — journal-like */
 .section-header {
   @apply text-xs font-medium uppercase tracking-wider;

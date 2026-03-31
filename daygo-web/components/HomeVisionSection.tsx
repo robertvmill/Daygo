@@ -858,17 +858,22 @@ export function HomeVisionSection({ userId, selectedDate }: HomeVisionSectionPro
                           <div className="space-y-1.5">
                             {actionItems.map((item, ii) => {
                               const key = `hv-${index}-${ii}`
+                              const isChecked = mitChecked[key]
                               return (
                                 <button key={key} onClick={(e) => toggleMit(key, e)} className="w-full flex items-start gap-2.5 group text-left">
-                                  <div className={`w-4.5 h-4.5 mt-0.5 rounded-full border flex items-center justify-center flex-shrink-0 transition-all ${
-                                    mitChecked[key] ? colors.checked : `border-slate-300 dark:border-slate-600 ${colors.checkHover}`
+                                  <div className={`w-4 h-4 mt-0.5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all duration-200 ${
+                                    isChecked ? colors.checked : `border-slate-300 dark:border-slate-600 ${colors.checkHover}`
                                   }`}>
-                                    {mitChecked[key] && <Check className="w-2.5 h-2.5 text-white" />}
+                                    {isChecked && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                                   </div>
-                                  <p className={`text-[13px] leading-relaxed ${
-                                    mitChecked[key] ? 'text-bevel-text-secondary dark:text-slate-500 line-through' : 'text-bevel-text dark:text-slate-300'
+                                  <p className={`text-[13px] leading-relaxed relative transition-colors duration-200 ${
+                                    isChecked ? 'text-bevel-text-secondary dark:text-slate-500' : 'text-bevel-text dark:text-slate-300'
                                   }`}>
                                     {item.label}
+                                    <span
+                                      className="absolute left-0 top-1/2 h-[1.5px] -translate-y-1/2 bg-current opacity-60 transition-all duration-500 ease-in-out"
+                                      style={{ width: isChecked ? '100%' : '0%' }}
+                                    />
                                   </p>
                                 </button>
                               )
