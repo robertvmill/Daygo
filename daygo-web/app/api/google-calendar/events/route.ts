@@ -34,19 +34,26 @@ export async function GET(request: NextRequest) {
 
     const events = await googleCalendarService.getEvents(user.id, date, tz)
 
-    // Transform Google Calendar events to a simpler format
-    const transformedEvents = events.map(event => ({
-      id: event.id,
-      title: event.summary || 'Untitled',
-      description: event.description || null,
-      start_time: event.start?.dateTime
-        ? new Date(event.start.dateTime).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: tz })
-        : '00:00:00',
-      end_time: event.end?.dateTime
-        ? new Date(event.end.dateTime).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: tz })
-        : '23:59:59',
-      is_all_day: !event.start?.dateTime,
-    }))
+    // Transform and filter to only events that start on the requested date in the user's timezone
+    const transformedEvents = events
+      .filter(event => {
+        if (!event.start?.dateTime) return true // keep all-day events
+        // en-CA locale gives YYYY-MM-DD format
+        const startDate = new Date(event.start.dateTime).toLocaleDateString('en-CA', { timeZone: tz })
+        return startDate === date
+      })
+      .map(event => ({
+        id: event.id,
+        title: event.summary || 'Untitled',
+        description: event.description || null,
+        start_time: event.start?.dateTime
+          ? new Date(event.start.dateTime).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: tz })
+          : '00:00:00',
+        end_time: event.end?.dateTime
+          ? new Date(event.end.dateTime).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: tz })
+          : '23:59:59',
+        is_all_day: !event.start?.dateTime,
+      }))
 
     return NextResponse.json({ events: transformedEvents })
   } catch (error) {

@@ -11,9 +11,16 @@ interface JournalCardProps {
   onEdit?: (prompt: JournalPromptWithEntry) => void
 }
 
+function plainTextToHtml(text: string): string {
+  if (!text) return ''
+  if (text.includes('<')) return text // already HTML
+  return text.split('\n').map(line => `<p>${line || '<br>'}</p>`).join('')
+}
+
 export function JournalCard({ prompt, onSave, onEdit }: JournalCardProps) {
   const [isEditing, setIsEditing] = useState(false)
-  const [entry, setEntry] = useState(prompt.todayEntry || prompt.template_text || '')
+  const initialContent = prompt.todayEntry || plainTextToHtml(prompt.template_text || '')
+  const [entry, setEntry] = useState(initialContent)
 
   const handleSave = () => {
     onSave(prompt.id, entry)
@@ -59,7 +66,7 @@ export function JournalCard({ prompt, onSave, onEdit }: JournalCardProps) {
             </button>
             <button
               onClick={() => {
-                setEntry(prompt.todayEntry || prompt.template_text || '')
+                setEntry(prompt.todayEntry || plainTextToHtml(prompt.template_text || ''))
                 setIsEditing(false)
               }}
               className="px-5 py-2.5 bg-white/60 dark:bg-slate-700/60 hover:bg-white/80 dark:hover:bg-slate-600/80 text-bevel-text dark:text-white rounded-xl text-sm font-semibold transition-all backdrop-blur-sm border border-white/30 dark:border-slate-600/50"
@@ -72,7 +79,7 @@ export function JournalCard({ prompt, onSave, onEdit }: JournalCardProps) {
         <div
           className="relative ml-10 cursor-pointer"
           onClick={() => {
-            setEntry(prompt.todayEntry || prompt.template_text || '')
+            setEntry(prompt.todayEntry || plainTextToHtml(prompt.template_text || ''))
             setIsEditing(true)
           }}
         >

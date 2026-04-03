@@ -242,10 +242,10 @@ export function DailyPlanningScratchpad({
   useEffect(() => {
     if (!resizingBlockId) return
 
-    const handleMouseMove = (event: MouseEvent) => {
+    const updateResize = (clientY: number) => {
       if (!resizeAreaRef.current) return
       const rect = resizeAreaRef.current.getBoundingClientRect()
-      const relativeY = Math.max(0, Math.min(event.clientY - rect.top, rect.height))
+      const relativeY = Math.max(0, Math.min(clientY - rect.top, rect.height))
       const slotIndex = Math.floor(relativeY / SLOT_HEIGHT)
       const hoveredStart = slots[Math.min(slotIndex, slots.length - 1)]
 
@@ -256,13 +256,24 @@ export function DailyPlanningScratchpad({
       }))
     }
 
+    const handleMouseMove = (event: MouseEvent) => updateResize(event.clientY)
     const handleMouseUp = () => setResizingBlockId(null)
+
+    const handleTouchMove = (event: TouchEvent) => {
+      event.preventDefault()
+      updateResize(event.touches[0].clientY)
+    }
+    const handleTouchEnd = () => setResizingBlockId(null)
 
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
+    window.addEventListener('touchmove', handleTouchMove, { passive: false })
+    window.addEventListener('touchend', handleTouchEnd)
     return () => {
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
+      window.removeEventListener('touchmove', handleTouchMove)
+      window.removeEventListener('touchend', handleTouchEnd)
     }
   }, [resizingBlockId, slots])
 
@@ -282,6 +293,39 @@ export function DailyPlanningScratchpad({
     return covered
   }, [blocks])
 
+  // Multi-slot Google Calendar events rendered as spanning blocks
+  const gcalSpanBlocks = useMemo(() => {
+    return googleCalendarEvents
+      .filter((e) => !e.is_all_day)
+      .map((e) => {
+        const start = timeStringToMinutes(e.start_time)
+        const end = timeStringToMinutes(e.end_time)
+        // Round start down and end up to nearest slot boundary
+        const slotStart_ = Math.floor(start / SLOT_MINUTES) * SLOT_MINUTES
+        const slotEnd = Math.ceil(end / SLOT_MINUTES) * SLOT_MINUTES
+        return { id: e.id, title: e.title, start: slotStart_, end: slotEnd, slots: (slotEnd - slotStart_) / SLOT_MINUTES }
+      })
+      .filter((e) => e.slots > 1)
+  }, [googleCalendarEvents])
+
+  // Slots covered by multi-slot gcal events (all but the first)
+  const gcalCoveredSlots = useMemo(() => {
+    const covered = new Set<number>()
+    gcalSpanBlocks.forEach((e) => {
+      for (let m = e.start + SLOT_MINUTES; m < e.end; m += SLOT_MINUTES) {
+        covered.add(m)
+      }
+    })
+    return covered
+  }, [gcalSpanBlocks])
+
+  // Map from slot start → gcal span block
+  const gcalBlockByStart = useMemo(() => {
+    const map = new Map<number, typeof gcalSpanBlocks[number]>()
+    gcalSpanBlocks.forEach((e) => map.set(e.start, e))
+    return map
+  }, [gcalSpanBlocks])
+
   const filledCount = blocks.filter((block) => block.text.trim().length > 0).length
   const currentTimeOffset = currentTimeMinutes === null
     ? null
@@ -291,6 +335,18 @@ export function DailyPlanningScratchpad({
     const existingBlock = blocks.find((block) => slotMinutes >= block.start && slotMinutes < block.end)
     if (existingBlock) return
     setBlocks((current) => sortBlocks([...current, createBlock(slotMinutes)]))
+  }
+
+  const handleCreateBlockFromGcal = (gcalStart: number, gcalEnd: number) => {
+    const existingBlock = blocks.find((block) => gcalStart >= block.start && gcalStart < block.end)
+    if (existingBlock) return
+    const newBlock: ScratchpadBlock = {
+      id: `block-${gcalStart}-${Date.now()}`,
+      start: gcalStart,
+      end: gcalEnd,
+      text: '',
+    }
+    setBlocks((current) => sortBlocks([...current, newBlock]))
   }
 
   const handleBlockTextChange = (blockId: string, text: string) => {
@@ -348,6 +404,11 @@ export function DailyPlanningScratchpad({
                 if (coveredSlots.has(slotMinutes)) return null
 
                 const block = blockByStart.get(slotMinutes)
+                const gcalBlock = gcalBlockByStart.get(slotMinutes)
+
+                // Skip slots covered by a multi-slot gcal event (when no scratchpad block takes priority)
+                if (!block && gcalCoveredSlots.has(slotMinutes)) return null
+
                 const pinnedEvents = getPinnedEventsForSlot(slotMinutes, scheduleEvents, googleCalendarEvents)
                 const blockPinnedEvents = block
                   ? slots
@@ -356,6 +417,12 @@ export function DailyPlanningScratchpad({
                       .filter((event, index, array) => array.findIndex((candidate) => candidate.id === event.id) === index)
                   : pinnedEvents
 
+                // Single-slot gcal events that should show as chips (<=30 min)
+                const singleSlotPinnedEvents = pinnedEvents.filter((e) => {
+                  const isMultiSlot = gcalSpanBlocks.some((b) => `google-${b.id}` === e.id)
+                  return !isMultiSlot
+                })
+
                 return (
                   <div
                     key={slotMinutes}
@@ -363,7 +430,7 @@ export function DailyPlanningScratchpad({
                   >
                     <div
                       className="text-right"
-                      style={{ height: `${SLOT_HEIGHT}px`, lineHeight: `${SLOT_HEIGHT}px` }}
+                      style={{ height: gcalBlock && !block ? `${SLOT_HEIGHT * gcalBlock.slots}px` : `${SLOT_HEIGHT}px`, lineHeight: `${SLOT_HEIGHT}px` }}
                     >
                       <p className="text-xs font-medium uppercase tracking-[0.16em] text-[#8a7f6d]">
                         {formatSlotLabel(slotMinutes)}
@@ -412,7 +479,8 @@ export function DailyPlanningScratchpad({
 
                         <div
                           onMouseDown={() => setResizingBlockId(block.id)}
-                          className="absolute inset-x-2 bottom-0 h-7 cursor-row-resize"
+                          onTouchStart={() => setResizingBlockId(block.id)}
+                          className="absolute inset-x-2 bottom-0 h-7 cursor-row-resize touch-none"
                           aria-label="Resize block"
                           role="presentation"
                         >
@@ -420,6 +488,24 @@ export function DailyPlanningScratchpad({
                           <div className="pointer-events-none absolute inset-x-10 bottom-[7px] h-[4px] rounded-full bg-[#efe6d6]/55" />
                         </div>
                       </div>
+                    ) : gcalBlock ? (
+                      <button
+                        onClick={() => handleCreateBlockFromGcal(gcalBlock.start, gcalBlock.end)}
+                        className="group relative w-full rounded-[1rem] border border-blue-100 bg-blue-50/60 px-3 py-2 text-left transition-colors hover:bg-blue-50/90"
+                        style={{ minHeight: `${SLOT_HEIGHT * gcalBlock.slots}px` }}
+                      >
+                        <div className="pointer-events-none absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-blue-300/70" />
+                        <div className="flex items-start gap-1.5 pl-3">
+                          <Clock3 className="mt-[3px] w-3 h-3 shrink-0 text-blue-400" />
+                          <span className="text-[13px] font-medium leading-snug text-blue-700">{gcalBlock.title}</span>
+                        </div>
+                        <p className="mt-0.5 pl-3 text-[10px] text-blue-400">
+                          {formatSlotLabel(gcalBlock.start)} – {formatSlotLabel(gcalBlock.end)}
+                        </p>
+                        <p className="absolute bottom-2.5 right-3 text-[10px] text-blue-300 opacity-0 transition-opacity group-hover:opacity-100">
+                          tap to add notes
+                        </p>
+                      </button>
                     ) : (
                       <button
                         onClick={() => handleCreateBlock(slotMinutes)}
@@ -429,9 +515,9 @@ export function DailyPlanningScratchpad({
                         <div className="pointer-events-none absolute inset-x-2 top-1/2 h-px -translate-y-1/2 bg-[#ebe2d4]/42" />
                         <div className="pointer-events-none absolute left-0 top-[7px] bottom-[7px] w-px bg-[#e3d9c9]/70" />
 
-                        {pinnedEvents.length > 0 && (
+                        {singleSlotPinnedEvents.length > 0 && (
                           <div className="relative z-10 flex h-full flex-wrap items-center gap-1.5 pl-3">
-                            {pinnedEvents.map((event) => (
+                            {singleSlotPinnedEvents.map((event) => (
                               <span
                                 key={event.id}
                                 className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${

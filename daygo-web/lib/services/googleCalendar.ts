@@ -163,9 +163,15 @@ export const googleCalendarService = {
   async getEvents(userId: string, date: string, timeZone: string = 'America/Toronto'): Promise<GoogleCalendarEvent[]> {
     const calendar = await this.getCalendarClient(userId)
 
-    // Google Calendar API handles timezone conversion for us
-    const timeMin = `${date}T00:00:00`
-    const timeMax = `${date}T23:59:59`
+    // RFC3339 requires mandatory timezone offset — use a 48-hour UTC window
+    // centered on the date to capture events in any timezone offset (±12h)
+    const dayStart = new Date(`${date}T00:00:00Z`)
+    dayStart.setUTCHours(dayStart.getUTCHours() - 12)
+    const dayEnd = new Date(`${date}T00:00:00Z`)
+    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1)
+    dayEnd.setUTCHours(dayEnd.getUTCHours() + 12)
+    const timeMin = dayStart.toISOString()
+    const timeMax = dayEnd.toISOString()
 
     // Get all calendars
     const calendarList = await calendar.calendarList.list()

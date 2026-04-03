@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Sparkles, Loader2, Camera, X, Sun, Moon, Shuffle, Plus, Trash2, BookOpen, ChevronDown, ChevronUp } from 'lucide-react'
+import { Sparkles, Loader2, Camera, X, Sun, Moon, Shuffle, Plus, Trash2, BookOpen, ChevronDown, ChevronUp, Dumbbell, Clock } from 'lucide-react'
 import Image from 'next/image'
 import { mealInspirationsService } from '@/lib/services/mealInspirations'
 import { mealLibraryService, type MealLibraryItem } from '@/lib/services/mealLibrary'
@@ -90,6 +90,10 @@ export function MealPlanCard({ userId, selectedDate }: MealPlanCardProps) {
   const queryClient = useQueryClient()
   const date = formatDate(selectedDate)
 
+  const yesterday = new Date(selectedDate)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yesterdayDate = formatDate(yesterday)
+
   // Today's plan state
   const [generating, setGenerating] = useState(false)
   const [pickingRandom, setPickingRandom] = useState(false)
@@ -99,6 +103,14 @@ export function MealPlanCard({ userId, selectedDate }: MealPlanCardProps) {
   const [initialized, setInitialized] = useState(false)
   const [focusedSlot, setFocusedSlot] = useState<'lunch' | 'dinner' | null>(null)
   const [addFormFocused, setAddFormFocused] = useState(false)
+
+  // Yesterday + coach state
+  const [showYesterday, setShowYesterday] = useState(false)
+  const [yesterdayTitles, setYesterdayTitles] = useState({ lunch: '', dinner: '' })
+  const [yesterdaySnacks, setYesterdaySnacks] = useState('')
+  const [yesterdayInitialized, setYesterdayInitialized] = useState(false)
+  const [coachFeedback, setCoachFeedback] = useState<string | null>(null)
+  const [gettingFeedback, setGettingFeedback] = useState(false)
 
   // Collection state
   const [showCollection, setShowCollection] = useState(false)
@@ -127,8 +139,16 @@ export function MealPlanCard({ userId, selectedDate }: MealPlanCardProps) {
     enabled: !!userId,
   })
 
+  const { data: yesterdayMeals = [], isLoading: yesterdayLoading } = useQuery({
+    queryKey: ['meal-inspirations', userId, yesterdayDate],
+    queryFn: () => mealInspirationsService.getByDate(userId, yesterdayDate),
+    enabled: !!userId && showYesterday,
+  })
+
   const lunchMeal = meals.find(m => m.meal_type === 'lunch')
   const dinnerMeal = meals.find(m => m.meal_type === 'dinner')
+  const yLunch = yesterdayMeals.find(m => m.meal_type === 'lunch')
+  const yDinner = yesterdayMeals.find(m => m.meal_type === 'dinner')
 
   // Sync local state on load / date change
   useEffect(() => { setInitialized(false) }, [date])
@@ -139,6 +159,14 @@ export function MealPlanCard({ userId, selectedDate }: MealPlanCardProps) {
       setInitialized(true)
     }
   }, [meals, isLoading, initialized, lunchMeal, dinnerMeal])
+
+  useEffect(() => { setYesterdayInitialized(false) }, [yesterdayDate])
+  useEffect(() => {
+    if (showYesterday && !yesterdayInitialized && !yesterdayLoading) {
+      setYesterdayTitles({ lunch: yLunch?.title ?? '', dinner: yDinner?.title ?? '' })
+      setYesterdayInitialized(true)
+    }
+  }, [yesterdayMeals, yesterdayLoading, yesterdayInitialized, yLunch, yDinner, showYesterday])
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   const upsertMutation = useMutation({
@@ -188,6 +216,49 @@ export function MealPlanCard({ userId, selectedDate }: MealPlanCardProps) {
     mutationFn: (id: string) => mealLibraryService.delete(id, userId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['meal-library', userId] }),
   })
+
+  const upsertYesterdayMutation = useMutation({
+    mutationFn: async ({ mealType, updates }: {
+      mealType: 'lunch' | 'dinner'
+      updates: { title?: string }
+    }) => {
+      const existing = yesterdayMeals.find(m => m.meal_type === mealType)
+      if (existing) return mealInspirationsService.update(existing.id, userId, updates)
+      return mealInspirationsService.create(userId, yesterdayDate, { meal_type: mealType, ...updates })
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['meal-inspirations', userId, yesterdayDate] }),
+  })
+
+  const handleGetCoachFeedback = async () => {
+    setGettingFeedback(true)
+    setCoachFeedback('')
+    try {
+      const res = await fetch('/api/nutrition-coach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          yesterdayLunch: yesterdayTitles.lunch,
+          yesterdayDinner: yesterdayTitles.dinner,
+          yesterdaySnacks,
+          todayLunch: titles.lunch,
+          todayDinner: titles.dinner,
+        }),
+      })
+      if (!res.ok) throw new Error('Coach feedback failed')
+      const reader = res.body?.getReader()
+      if (!reader) throw new Error('No response body')
+      const decoder = new TextDecoder()
+      setGettingFeedback(false)
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        setCoachFeedback(prev => (prev ?? '') + decoder.decode(value, { stream: true }))
+      }
+    } catch (e) {
+      console.error('Failed to get coach feedback:', e)
+      setGettingFeedback(false)
+    }
+  }
 
   // ── Paste handler (today's slots + add recipe form) ───────────────────────
   useEffect(() => {
@@ -389,6 +460,92 @@ export function MealPlanCard({ userId, selectedDate }: MealPlanCardProps) {
             </div>
           )
         })}
+      </div>
+
+      {/* Yesterday's Meals + Coach Feedback */}
+      <div className="border-t border-gray-100 dark:border-slate-700/50 pt-3">
+        <button
+          onClick={() => setShowYesterday(v => !v)}
+          className="flex items-center gap-2 w-full text-left group"
+        >
+          <Clock className="w-3.5 h-3.5 text-gray-400 dark:text-slate-500" />
+          <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-slate-500 group-hover:text-gray-600 dark:group-hover:text-slate-300 transition-colors">
+            Yesterday
+          </span>
+          <span className="text-xs text-gray-300 dark:text-slate-600">· What did you eat?</span>
+          {showYesterday
+            ? <ChevronUp className="w-3.5 h-3.5 text-gray-400 dark:text-slate-500 ml-auto" />
+            : <ChevronDown className="w-3.5 h-3.5 text-gray-400 dark:text-slate-500 ml-auto" />}
+        </button>
+
+        {showYesterday && (
+          <div className="mt-3 space-y-3">
+            {yesterdayLoading ? (
+              <div className="flex items-center justify-center py-3">
+                <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  {MEAL_SLOTS.map(({ key, label, Icon, time }) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <Icon className="w-3.5 h-3.5 text-gray-400 dark:text-slate-500 flex-shrink-0" />
+                      <span className="text-xs text-gray-400 dark:text-slate-500 w-12 flex-shrink-0">{label}</span>
+                      <input
+                        type="text"
+                        placeholder={`Yesterday's ${label.toLowerCase()}…`}
+                        value={yesterdayTitles[key]}
+                        onChange={(e) => setYesterdayTitles(prev => ({ ...prev, [key]: e.target.value }))}
+                        onBlur={() => {
+                          const title = yesterdayTitles[key]
+                          const existing = yesterdayMeals.find(m => m.meal_type === key)
+                          if (!existing && !title) return
+                          upsertYesterdayMutation.mutate({ mealType: key, updates: { title } })
+                        }}
+                        className="flex-1 px-3 py-1.5 text-xs bg-gray-50 dark:bg-slate-700/50 border border-gray-200 dark:border-slate-600/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/30 placeholder:text-gray-400 dark:placeholder:text-slate-500 text-gray-700 dark:text-slate-300"
+                      />
+                    </div>
+                  ))}
+                  {/* Snacks row */}
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-3.5 h-3.5 text-gray-400 dark:text-slate-500 flex-shrink-0" />
+                    <span className="text-xs text-gray-400 dark:text-slate-500 w-12 flex-shrink-0">Snacks</span>
+                    <input
+                      type="text"
+                      placeholder="Snacks, drinks, treats…"
+                      value={yesterdaySnacks}
+                      onChange={(e) => setYesterdaySnacks(e.target.value)}
+                      className="flex-1 px-3 py-1.5 text-xs bg-gray-50 dark:bg-slate-700/50 border border-gray-200 dark:border-slate-600/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/30 placeholder:text-gray-400 dark:placeholder:text-slate-500 text-gray-700 dark:text-slate-300"
+                    />
+                  </div>
+                </div>
+
+                {/* Coach feedback button */}
+                <button
+                  onClick={handleGetCoachFeedback}
+                  disabled={gettingFeedback}
+                  className="flex items-center gap-1.5 text-xs text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 transition-colors disabled:opacity-50"
+                >
+                  {gettingFeedback
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <Dumbbell className="w-3.5 h-3.5" />}
+                  Get Hyrox coach feedback
+                </button>
+
+                {/* Coach feedback display */}
+                {coachFeedback !== null && (
+                  <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800/30 rounded-xl p-3 space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <Dumbbell className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-orange-500">Hyrox Coach</span>
+                    </div>
+                    <p className="text-xs text-gray-700 dark:text-slate-300 leading-relaxed">{coachFeedback}</p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* My Meal Collection */}

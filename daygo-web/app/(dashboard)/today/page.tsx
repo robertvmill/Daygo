@@ -81,9 +81,8 @@ import { dailyNotesService } from '@/lib/services/dailyNotes'
 import { scheduleTemplatesService } from '@/lib/services/scheduleTemplates'
 import { aiJournalsService } from '@/lib/services/aiJournals'
 import { profilesService } from '@/lib/services/profiles'
-import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line } from 'recharts'
+import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { expensesService } from '@/lib/services/expenses'
-import { pushupsService } from '@/lib/services/pushups'
 import { dailyReflectionsService } from '@/lib/services/dailyReflections'
 import { SortableHabitCard } from '@/components/SortableHabitCard'
 import { SortableMantraCard } from '@/components/SortableMantraCard'
@@ -107,7 +106,7 @@ import { ScoreRing } from '@/components/ScoreRing'
 import { RichTextEditor } from '@/components/RichTextEditor'
 import { PepTalkAudioPlayer } from '@/components/PepTalkAudioPlayer'
 import { MealPlanCard } from '@/components/MealPlanCard'
-import type { HabitWithLog, Mantra, Todo, Vision, Identity, JournalPromptWithEntry, ScheduleEvent, CalendarRule, Goal, ScheduleTemplate, AIJournal, Book, Value, Expense, ExpenseCategory, PushupLog } from '@/lib/types/database'
+import type { HabitWithLog, Mantra, Todo, Vision, Identity, JournalPromptWithEntry, ScheduleEvent, CalendarRule, Goal, ScheduleTemplate, AIJournal, Book, Value, Expense, ExpenseCategory } from '@/lib/types/database'
 import { calculateMissionScore } from '@/lib/services/missionScore'
 import confetti from 'canvas-confetti'
 
@@ -267,8 +266,7 @@ export default function TodayPage() {
   })
 
   // Expense state
-  const [pushupCount, setPushupCount] = useState('')
-  const [newExpenseAmount, setNewExpenseAmount] = useState('')
+const [newExpenseAmount, setNewExpenseAmount] = useState('')
   const [newExpenseCategory, setNewExpenseCategory] = useState<ExpenseCategory>('Food')
   const [newExpenseDescription, setNewExpenseDescription] = useState('')
   const [showExpenseList, setShowExpenseList] = useState(false)
@@ -299,7 +297,6 @@ export default function TodayPage() {
       aiJournals: true,
       books: true,
       expenses: true,
-      pushups: true,
     }
   })
 
@@ -715,7 +712,7 @@ export default function TodayPage() {
       return events || []
     },
     enabled: !!user && isGcalConnected,
-    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+    staleTime: 0,
     retry: false,
   })
 
@@ -760,33 +757,6 @@ export default function TodayPage() {
     enabled: !!user,
   })
 
-  // Push-ups
-  const { data: todayPushup } = useQuery({
-    queryKey: ['pushup-log', user?.id, dateStr],
-    queryFn: () => pushupsService.getLog(user!.id, dateStr),
-    enabled: !!user,
-  })
-
-  const { data: pushupLogs = [] } = useQuery({
-    queryKey: ['pushup-logs', user?.id],
-    queryFn: () => pushupsService.getLogs(user!.id, 30),
-    enabled: !!user,
-  })
-
-  const upsertPushupMutation = useMutation({
-    mutationFn: (count: number) => pushupsService.upsertLog(user!.id, dateStr, count),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pushup-log', user?.id, dateStr] })
-      queryClient.invalidateQueries({ queryKey: ['pushup-logs', user?.id] })
-    },
-  })
-
-  // Pre-fill pushup input when data loads
-  useEffect(() => {
-    if (todayPushup) {
-      setPushupCount(String(todayPushup.count))
-    }
-  }, [todayPushup])
 
   const createExpenseMutation = useMutation({
     mutationFn: ({ amount, category, description }: { amount: number; category: ExpenseCategory; description: string | null }) =>
@@ -978,7 +948,21 @@ export default function TodayPage() {
   const saveEntryMutation = useMutation({
     mutationFn: ({ promptId, entry }: { promptId: string; entry: string }) =>
       journalService.saveEntry(user!.id, promptId, entry, dateStr),
-    onSuccess: () => {
+    onMutate: async ({ promptId, entry }) => {
+      await queryClient.cancelQueries({ queryKey: ['journal-prompts', user?.id, dateStr] })
+      const previous = queryClient.getQueryData<JournalPromptWithEntry[]>(['journal-prompts', user?.id, dateStr])
+      queryClient.setQueryData<JournalPromptWithEntry[]>(
+        ['journal-prompts', user?.id, dateStr],
+        (old) => old?.map(p => p.id === promptId ? { ...p, todayEntry: entry } : p) ?? []
+      )
+      return { previous }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['journal-prompts', user?.id, dateStr], context.previous)
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['journal-prompts', user?.id, dateStr] })
     },
   })
@@ -1222,7 +1206,19 @@ export default function TodayPage() {
 
   const reorderHabitsMutation = useMutation({
     mutationFn: (orderedIds: string[]) => habitsService.reorderHabits(orderedIds),
-    onSuccess: () => {
+    onMutate: async (orderedIds) => {
+      await queryClient.cancelQueries({ queryKey: ['habits', user?.id, dateStr] })
+      const previousHabits = queryClient.getQueryData(['habits', user?.id, dateStr])
+      queryClient.setQueryData(['habits', user?.id, dateStr], (old: HabitWithLog[] | undefined) => {
+        if (!old) return []
+        return orderedIds.map(id => old.find(h => h.id === id)!).filter(Boolean)
+      })
+      return { previousHabits }
+    },
+    onError: (_err, _vars, context) => {
+      queryClient.setQueryData(['habits', user?.id, dateStr], (context as { previousHabits: unknown })?.previousHabits)
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['habits'] })
     },
   })
@@ -1230,7 +1226,18 @@ export default function TodayPage() {
   const toggleHabitMutation = useMutation({
     mutationFn: ({ habitId, completed }: { habitId: string; completed: boolean }) =>
       habitsService.toggleHabitCompletion(user!.id, habitId, dateStr, completed),
-    onSuccess: () => {
+    onMutate: async ({ habitId, completed }) => {
+      await queryClient.cancelQueries({ queryKey: ['habits', user?.id, dateStr] })
+      const previousHabits = queryClient.getQueryData(['habits', user?.id, dateStr])
+      queryClient.setQueryData(['habits', user?.id, dateStr], (old: HabitWithLog[] | undefined) =>
+        old?.map(h => h.id === habitId ? { ...h, completed } : h) ?? []
+      )
+      return { previousHabits }
+    },
+    onError: (_err, _vars, context) => {
+      queryClient.setQueryData(['habits', user?.id, dateStr], (context as { previousHabits: unknown })?.previousHabits)
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['habits'] })
     },
   })
@@ -2213,137 +2220,6 @@ export default function TodayPage() {
       {/* Unique Edge — Venn diagram of top 1% strengths */}
       <UniqueEdgeVenn />
 
-      {/* Today's Calendar — Google Calendar events */}
-      <section id="section-calendar" className="mb-10 -mt-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <CalendarDays className="w-4 h-4 text-slate-400" />
-            <h2 className="text-xs font-medium uppercase tracking-[0.12em] text-slate-400">
-              Today&apos;s Calendar
-            </h2>
-          </div>
-          <div className="flex items-center gap-2">
-            {!isGcalConnected && (
-              <button
-                onClick={() => connectGcalMutation.mutate()}
-                disabled={connectGcalMutation.isPending}
-                className="text-xs font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-              >
-                {connectGcalMutation.isPending ? 'Connecting...' : 'Connect Google Calendar'}
-              </button>
-            )}
-            {isGcalConnected && (
-              <>
-                <button
-                  onClick={() => {
-                    queryClient.invalidateQueries({ queryKey: ['gcal-events', user?.id, dateStr] })
-                  }}
-                  className="p-1 text-slate-300 hover:text-slate-500 dark:text-slate-600 dark:hover:text-slate-400 transition-colors"
-                  title="Refresh events"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => setShowCalendarPicker(!showCalendarPicker)}
-                  className="text-[10px] font-medium text-slate-300 hover:text-slate-500 dark:text-slate-600 dark:hover:text-slate-400 uppercase tracking-wider transition-colors"
-                >
-                  {activeCalendarName || 'Connected'}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Calendar picker dropdown */}
-        {isGcalConnected && showCalendarPicker && (
-          <div className="mb-4 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-card dark:bg-slate-900 space-y-1">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400 mb-2">Select calendar</p>
-            {gcalCalendars.map((cal: { id: string; summary: string; primary?: boolean }) => (
-              <button
-                key={cal.id}
-                onClick={() => {
-                  switchCalendarMutation.mutate(cal.id)
-                }}
-                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                  cal.id === activeCalendarId
-                    ? 'bg-slate-100 dark:bg-slate-800 text-bevel-text dark:text-slate-200 font-medium'
-                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                }`}
-              >
-                {cal.summary}
-                {cal.primary && <span className="ml-2 text-[10px] text-slate-300 dark:text-slate-600">(primary)</span>}
-              </button>
-            ))}
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 mt-2">
-              <button
-                onClick={() => disconnectGcalMutation.mutate()}
-                className="text-xs text-slate-400 hover:text-red-400 transition-colors"
-              >
-                Disconnect
-              </button>
-            </div>
-          </div>
-        )}
-
-        {isGcalConnected && googleCalendarEvents.length > 0 ? (
-          <div className="space-y-0">
-            {/* All-day events */}
-            {(googleCalendarEvents as Array<{ id: string; title: string; description?: string | null; start_time: string; end_time: string; is_all_day?: boolean }>)
-              .filter((event) => event.is_all_day)
-              .map((event) => (
-                <div
-                  key={event.id}
-                  className="flex items-center gap-3 py-2 border-b border-slate-100 dark:border-slate-800"
-                >
-                  <div className="w-14 text-right flex-shrink-0">
-                    <span className="text-[10px] font-medium text-slate-300 dark:text-slate-600 uppercase">all day</span>
-                  </div>
-                  <div className="w-px min-h-[16px] bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
-                  <p className="text-sm text-slate-400 dark:text-slate-500 truncate">{event.title}</p>
-                </div>
-              ))}
-            {/* Timed events */}
-            {(googleCalendarEvents as Array<{ id: string; title: string; description?: string | null; start_time: string; end_time: string; is_all_day?: boolean }>)
-              .filter((event) => !event.is_all_day)
-              .sort((a, b) => a.start_time.localeCompare(b.start_time))
-              .map((event) => {
-                const formatTime = (t: string) => {
-                  const [h, m] = t.split(':')
-                  const hour = parseInt(h)
-                  const ampm = hour >= 12 ? 'pm' : 'am'
-                  const display = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour
-                  return `${display}:${m}${ampm}`
-                }
-                return (
-                  <div
-                    key={event.id}
-                    className="flex items-start gap-3 py-2.5 border-b border-slate-100 dark:border-slate-800 last:border-0"
-                  >
-                    <div className="w-14 text-right flex-shrink-0">
-                      <span className="text-xs font-medium text-slate-400 dark:text-slate-500 tabular-nums">
-                        {formatTime(event.start_time)}
-                      </span>
-                    </div>
-                    <div className="w-px h-full min-h-[20px] bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-bevel-text dark:text-slate-200 truncate">
-                        {event.title}
-                      </p>
-                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-                        {formatTime(event.start_time)} – {formatTime(event.end_time)}
-                      </p>
-                    </div>
-                  </div>
-                )
-              })}
-          </div>
-        ) : isGcalConnected && googleCalendarEvents.length === 0 ? (
-          <p className="text-sm text-slate-300 dark:text-slate-600 italic">No events today — open canvas for deep work.</p>
-        ) : !isGcalConnected ? (
-          <p className="text-sm text-slate-300 dark:text-slate-600 italic">Connect your calendar to see today&apos;s schedule.</p>
-        ) : null}
-      </section>
-
       {/* Daily Top 3 */}
       {user && (
         <DailyTop3 userId={user.id} selectedDate={selectedDate} />
@@ -3160,87 +3036,6 @@ export default function TodayPage() {
             </button>
             {expandedSections.healthyFoods && (
               <MealPlanCard userId={user!.id} selectedDate={selectedDate} />
-            )}
-          </section>
-
-          {/* Push-Ups */}
-          <section className="rounded-2xl p-4 -mx-4">
-            <button
-              onClick={() => toggleSection('pushups')}
-              className="w-full flex items-center justify-between mb-4 group cursor-pointer"
-            >
-              <h2 className="section-header text-bevel-text-secondary dark:text-slate-400">
-                Morning Push-Ups {todayPushup && <span className="text-blue-500">({todayPushup.count})</span>}
-              </h2>
-              {expandedSections.pushups ? (
-                <ChevronUp className="w-4 h-4 text-bevel-text-secondary group-hover:text-bevel-text dark:group-hover:text-slate-300 transition-colors" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-bevel-text-secondary group-hover:text-bevel-text dark:group-hover:text-slate-300 transition-colors" />
-              )}
-            </button>
-            {expandedSections.pushups && (
-              <div className="space-y-4">
-                {/* Log Input */}
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min="1"
-                    placeholder="Count"
-                    value={pushupCount}
-                    onChange={(e) => setPushupCount(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && pushupCount) {
-                        upsertPushupMutation.mutate(parseInt(pushupCount))
-                      }
-                    }}
-                    className="w-24 px-3 py-2 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                  />
-                  <button
-                    onClick={() => {
-                      if (!pushupCount) return
-                      upsertPushupMutation.mutate(parseInt(pushupCount))
-                    }}
-                    disabled={!pushupCount || upsertPushupMutation.isPending}
-                    className="px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-xl transition-colors font-medium"
-                  >
-                    {todayPushup ? 'Update' : 'Save'}
-                  </button>
-                  {todayPushup && (
-                    <span className="text-xs text-green-600 dark:text-green-400 font-medium">Logged today</span>
-                  )}
-                </div>
-
-                {/* Line Chart */}
-                {pushupLogs.length > 1 && (
-                  <div className="bg-white dark:bg-slate-800/50 rounded-xl p-4 border border-gray-100 dark:border-slate-700/50">
-                    <h3 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-3">
-                      Recent Progress
-                    </h3>
-                    <div className="h-40">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={pushupLogs.map((l: PushupLog) => ({
-                          date: new Date(l.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                          count: l.count,
-                        }))}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                          <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                          <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" allowDecimals={false} />
-                          <Tooltip
-                            formatter={(value) => [value, 'Push-ups']}
-                            contentStyle={{
-                              backgroundColor: 'var(--color-bg, #fff)',
-                              border: '1px solid #e2e8f0',
-                              borderRadius: '8px',
-                              fontSize: '12px',
-                            }}
-                          />
-                          <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6', r: 3 }} activeDot={{ r: 5 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                )}
-              </div>
             )}
           </section>
 
